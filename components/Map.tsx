@@ -40,15 +40,17 @@ export default function Map({
   trails = [],
   track = [],
   follow = false,
+  planned = [],
 }: {
   pins: Pin[];
   routes?: Line[];
   trails?: Line[];
   track?: [number, number][][];
   follow?: boolean;
+  planned?: [number, number][];
 }) {
-  const fitPoints: [number, number][] = [...pins.map((p) => p.pos), ...routes.flatMap((r) => r.coords), ...track.flat()];
-  const fitKey = [pins.map((p) => p.id).join(","), routes.map((r) => r.id).join(","), follow ? String(track.length) : track.map((t) => t.length).join(",")].join("|");
+  const fitPoints: [number, number][] = [...pins.map((p) => p.pos), ...planned, ...routes.flatMap((r) => r.coords), ...track.flat()];
+  const fitKey = [String(planned.length), pins.map((p) => p.id).join(","), routes.map((r) => r.id).join(","), follow ? String(track.length) : track.map((t) => t.length).join(",")].join("|");
   const first = track[0]?.[0];
   const lastSeg = track[track.length - 1];
   const last = lastSeg?.[lastSeg.length - 1];
@@ -60,6 +62,14 @@ export default function Map({
       />
       <Fit points={fitPoints} fitKey={fitKey} />
       {follow && <Follow pos={pins[0]?.pos} />}
+      {planned.length > 1 && (
+        <>
+          <Polyline positions={planned} pathOptions={{ color: "#ffffff", weight: 9, opacity: 0.9 }} />
+          <Polyline positions={planned} pathOptions={{ color: "#2B7A33", weight: 5, opacity: 0.95, dashArray: "2 9", lineCap: "round" }} />
+          <Marker position={planned[0]} icon={icon("▶", false, "#2B7A33")}><Popup>Salida de la ruta</Popup></Marker>
+          <Marker position={planned[planned.length - 1]} icon={icon("⚑", false, "#b3261e")}><Popup>Meta de la ruta</Popup></Marker>
+        </>
+      )}
       {track.map((seg, i) => (
         <Polyline key={`t${i}`} positions={seg} pathOptions={{ color: "#FF8A1F", weight: 5, opacity: 0.9 }} />
       ))}

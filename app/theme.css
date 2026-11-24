@@ -70,3 +70,19 @@ body{background:var(--paper);color:var(--ink);font-family:ui-rounded,"SF Pro Rou
 .account{display:flex;align-items:center;gap:10px}.account-email{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;color:var(--muted)}
 @media(max-width:760px){.account-email{display:none}.welcome-logo{width:130px;height:130px}.brand-logo{width:48px;height:48px}}
 .welcome h1 em,.welcome-copy h1 em{background:none;color:var(--tang);font-style:normal}.welcome h1{color:var(--leaf-dark)}
+/* rutas */
+.route-load{display:inline-flex;align-items:center;gap:8px;padding:11px 16px;min-height:44px}
+.routes-panel{padding:0 18px 20px}
+.route-draft{display:grid;gap:8px;margin:12px 0;padding:14px;border:1.5px dashed var(--tang);border-radius:16px;background:var(--tang-soft)}
+.route-draft input{padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px}
+.route-preview{margin:12px 0}
+.route-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}
+.route-list li{display:grid;gap:10px;padding:14px;border:1.5px solid var(--line);border-radius:16px;background:#fff}
+.route-list li.active{border-color:var(--leaf);background:var(--leaf-soft)}
+.route-info strong{display:block;font-size:16px;color:var(--leaf-dark)}.route-info span{font-size:13px;color:var(--muted)}
+.route-actions{display:flex;flex-wrap:wrap;gap:8px}
+.route-actions .ghost.on{background:var(--leaf-dark);color:#fff;border-color:var(--leaf-dark)}
+.ghost.danger{color:#b3261e;border-color:#f3c6bd}
+.route-chip{margin:8px 0;padding:10px 14px;border-radius:12px;background:var(--leaf-soft);color:var(--leaf-dark);font-size:14px}
+.route-chip.off{background:#fff0ed;color:#b3261e;font-weight:700}
+@media(min-width:761px){.route-list li{grid-template-columns:1fr auto;align-items:center}}
