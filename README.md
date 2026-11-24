@@ -71,6 +71,8 @@ La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wiki
 
 ## Grabar salidas desde la web
 
+Parado en un semáforo o sin moverte, el ruido del GPS no suma distancia ni velocidad: un desplazamiento solo cuenta si supera el doble de la precisión reportada (mínimo 15 m) con velocidad media ≥ 2.9 km/h y, si el dispositivo informa velocidad, ≥ 2.5 km/h. Quieto se guarda un punto cada 20 s para que el grupo te siga viendo en el radar.
+
 La pestaña «● Grabar» registra una salida con el GPS del navegador: tiempo activo, distancia, velocidad, pausa/reanudar, mapa con el trazado y envío a tu cuenta (los compañeros te ven en el radar mientras estés activo). Si se corta la red, los puntos quedan en el teléfono y se envían al volver. **Limitación del navegador:** el GPS web se detiene si bloqueas la pantalla o cambias de app; la página pide mantener la pantalla encendida, pero no sustituye a la app nativa para salidas largas. Aún no se ha probado una salida real en un teléfono.
 
 ## App móvil

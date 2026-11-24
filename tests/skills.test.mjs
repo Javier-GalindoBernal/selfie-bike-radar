@@ -59,7 +59,7 @@ test("al grabar, un hueco de señal corta el trazo en vez de unirlo en recta", (
   let st = newRecState({ rideId: "r", groupId: "g", userId: "u", name: "x", now: t0 });
   const s = (lat, sec) => ({ lat, lng: -74.08, accuracy: 5, speed: 5, altitude: 2600, at: t0 + sec * 1000 });
   st = applySample(st, s(4.6, 1), "a", t0 + 600_000);
-  st = applySample(st, s(4.6001, 8), "b", t0 + 600_000);
+  st = applySample(st, s(4.6004, 8), "b", t0 + 600_000); // 44 m: movimiento real
   st = applySample(st, s(4.606, 100), "c", t0 + 600_000); // ~660 m tras 92 s sin señal
   const segs = toSegments(st.points);
   assert.equal(segs.length, 2);

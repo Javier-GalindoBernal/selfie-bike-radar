@@ -8,7 +8,7 @@ import { progressOnRoute } from '@/lib/routes';
 import { roadRoute } from '@/lib/route';
 import { rejoinPath, type Rejoin } from '@/lib/skills/routeCorrector';
 import { setActiveRoute, useRoutes } from '@/lib/routeStore';
-import { applySample, finish, newRecState, pause, resume, tick, toSegments, type RecState } from '@/lib/recording';
+import { applySample, displaySpeedKmh, finish, newRecState, pause, resume, tick, toSegments, type RecState } from '@/lib/recording';
 
 const MapView = dynamic(() => import('./Map'), { ssr: false, loading: () => <div className="map-loading">Cargando el mapa…</div> });
 const storeKey = (userId: string) => `radar-recording-${userId}`;
@@ -254,8 +254,8 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   const prog = route && last ? progressOnRoute([last.lat, last.lng], route.coords) : null;
   const offKey = prog && prog.off_m > 60 && last ? `${last.lat.toFixed(3)},${last.lng.toFixed(3)}` : '';
   const lastPos = last ? ([last.lat, last.lng] as [number, number]) : null;
-  const avg = s && s.activeMs > 0 ? (s.distance / (s.activeMs / 1000)) * 3.6 : 0;
-  const cur = last && last.speed !== null ? last.speed * 3.6 : avg;
+  const cur = s ? displaySpeedKmh(s, clock || Date.now()) : 0;
+  const still = !!s && s.status === 'active' && !!last && cur === 0;
 
   useEffect(() => {
     if (!offKey || !route || !lastPos) {
@@ -294,7 +294,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             <div><span>Velocidad</span><strong>{cur.toFixed(1)} km/h</strong></div>
           </div>
           <p className="map-caption" role="status">
-            {s.status === 'active' ? '● Grabando y compartiendo con tu grupo' : s.status === 'paused' ? '❚❚ En pausa: no se comparte tu posición' : '■ Salida finalizada'}
+            {s.status === 'active' ? (still ? '● Quieto: no suma distancia ni velocidad · sigues compartiendo con tu grupo' : '● Grabando y compartiendo con tu grupo') : s.status === 'paused' ? '❚❚ En pausa: no se comparte tu posición' : '■ Salida finalizada'}
             {last ? ` · precisión ±${Math.round(last.accuracy)} m` : s.status === 'active' ? ' · esperando la primera señal GPS…' : ''}
             {s.status === 'active' && !wake ? ' · no se pudo mantener la pantalla encendida: no la bloquees' : ''}
           </p>
