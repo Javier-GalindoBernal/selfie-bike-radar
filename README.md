@@ -44,7 +44,7 @@ Sin clave pública configurada sigue disponible «Explorar una vista de ejemplo�
 
 Ver `MOBILE.md` y `mobile/README.md`. No está publicada en tiendas ni se ha verificado una salida en dispositivos físicos. Compilar código Flutter no equivale a garantizar GPS en segundo plano: hay que probar bloqueo de pantalla, permisos, ahorro de batería, pausa, recuperación de red y exportación en Android y iPhone reales.
 
-No se incluyen sensores de pulso, potencia o cadencia ni mapas sin conexión. La distancia mostrada entre miembros es en línea recta; no se muestra un tiempo ficticio para alcanzarlos. El mapa de OpenStreetMap requiere internet y atribución. GPS offline puede registrar, pero compartir requiere datos.
+No se incluyen sensores de pulso, potencia o cadencia ni mapas sin conexión. La distancia entre miembros se calcula por calles y ciclovías con el servicio público de rutas de OpenStreetMap (routing.openstreetmap.de), que recibe las dos coordenadas de cada cálculo; si no responde, se indica «ruta no disponible» en lugar de inventar una distancia. El mapa dibuja la ruta en azul y el rastro reciente de cada ciclista en naranja, y el historial permite ver tu propio recorrido GPS. El mapa de OpenStreetMap requiere internet y atribución. GPS offline puede registrar, pero compartir requiere datos.
 
 ## Verificación
 

@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SupabaseClient, Session } from '@supabase/supabase-js';
 import { radarClient, type Group, type Rider, type Ride } from '@/lib/radar';
 import { fetchWithTimeout, savedConfig, type PublicConfig } from '@/lib/client-config';
-import { fmtAgo, fmtKm, fmtDur, haversine } from '@/lib/geo';
+import { fmtAgo, fmtKm, fmtDur } from '@/lib/geo';
+import { roadRoute, type RoadRoute } from '@/lib/route';
 
 const MapView=dynamic(()=>import('@/components/Map'),{ssr:false,loading:()=> <div className="map-loading">Cargando el mapa…</div>});
 const DEMO_GROUP:Group={id:'demo',name:'Rodada de muestra',invite_code:'DEMO — sin miembros reales'};
@@ -21,7 +22,7 @@ export default function Radar(){
  const [tab,setTab]=useState('radar'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  const [name,setName]=useState(''),[groupName,setGroupName]=useState(''),[code,setCode]=useState(''),[me,setMe]=useState<[number,number]|null>(null);
  const [lastSync,setLastSync]=useState<Date|null>(null),[connected,setConnected]=useState(true);
- const watch=useRef<number|null>(null);const [locMsg,setLocMsg]=useState('');const [locBusy,setLocBusy]=useState(false);
+ const watch=useRef<number|null>(null);const [locMsg,setLocMsg]=useState('');const [routes,setRoutes]=useState<Record<string,RoadRoute|null>>({}),[trails,setTrails]=useState<Record<string,[number,number][]>>({}),[viewRide,setViewRide]=useState<{id:string;name:string;track:[number,number][][];km:number}|null>(null);const [locBusy,setLocBusy]=useState(false);
  const [now,setNow]=useState(0);
  useEffect(()=>{const first=setTimeout(()=>setNow(Date.now()),0);const timer=setInterval(()=>setNow(Date.now()),10000);return()=>{clearTimeout(first);clearInterval(timer);};},[]);
  useEffect(()=>{
@@ -67,6 +68,7 @@ export default function Radar(){
   if(!isCurrent())return;
   if(live.error||history.error)throw live.error||history.error;
   setRiders(live.data||[]);setRides(history.data||[]);setLastSync(new Date());
+  setTrails(prev=>{const next:Record<string,[number,number][]>={};for(const r of (live.data||[]) as Rider[]){const old=prev[r.user_id]||[];const last=old[old.length-1];next[r.user_id]=!last||last[0]!==r.latitude||last[1]!==r.longitude?[...old,[r.latitude,r.longitude] as [number,number]].slice(-300):old;}return next;});
  },[client,session,gid,demo]);
  useEffect(()=>{
   let active=true;
@@ -99,12 +101,22 @@ export default function Radar(){
   navigator.geolocation.getCurrentPosition(ok,fail,{enableHighAccuracy:false,maximumAge:60000,timeout:15000});
   watch.current=navigator.geolocation.watchPosition(ok,()=>{},{enableHighAccuracy:true,maximumAge:10000,timeout:30000});
  }
- async function exportRide(ride:Ride){if(!client)return;await action(async()=>{
-  const points:{latitude:number;longitude:number;recorded_at:string;segment:number;altitude_m:number|null}[]=[];
+ type RidePoint={latitude:number;longitude:number;recorded_at:string;segment:number;altitude_m:number|null};
+ async function ridePoints(ride:Ride):Promise<RidePoint[]>{
+  const points:RidePoint[]=[];if(!client)return points;
   for(let offset=0;;offset+=1000){
    const {data,error}=await client.from('radar_points').select('latitude,longitude,recorded_at,segment,altitude_m').eq('ride_id',ride.id).order('recorded_at').order('id').range(offset,offset+999);
    if(error)throw error;points.push(...(data||[]));if(!data||data.length<1000)break;
   }
+  return points;
+ }
+ async function showRide(ride:Ride){await action(async()=>{
+  const points=await ridePoints(ride);if(!points.length)throw new Error('Esta salida todavía no tiene puntos sincronizados.');
+  const track:[number,number][][]=[];let seg=-1;for(const p of points){if(p.segment!==seg){track.push([]);seg=p.segment;}track[track.length-1].push([Number(p.latitude),Number(p.longitude)]);}
+  setViewRide({id:ride.id,name:ride.name,track,km:ride.distance_m});
+ });}
+ async function exportRide(ride:Ride){if(!client)return;await action(async()=>{
+  const points=await ridePoints(ride);
   if(!points.length)throw new Error('Esta salida todavía no tiene puntos sincronizados.');
   let lastSegment=-1;
   const track=points.map(p=>{const boundary=p.segment!==lastSegment?(lastSegment===-1?'<trkseg>':'</trkseg><trkseg>'):'';lastSegment=p.segment;return `${boundary}<trkpt lat="${Number(p.latitude)}" lon="${Number(p.longitude)}">${p.altitude_m===null?'':`<ele>${Number(p.altitude_m)}</ele>`}<time>${new Date(p.recorded_at).toISOString()}</time></trkpt>`;}).join('')+'</trkseg>';
@@ -112,6 +124,18 @@ export default function Radar(){
   const href=URL.createObjectURL(new Blob([xml],{type:'application/gpx+xml'}));const a=document.createElement('a');a.href=href;a.download=`salida-${ride.id}.gpx`;a.click();setTimeout(()=>URL.revokeObjectURL(href),1000);
  });}
  const activeGroups=demo?[DEMO_GROUP]:groups,activeRiders=demo?DEMO_RIDERS:riders.filter(r=>now-Date.parse(r.recorded_at)<120000),group=activeGroups.find(g=>g.id===gid)||activeGroups[0];
+ const myRider=activeRiders.find(r=>r.user_id===session?.user.id);
+ const origin:[number,number]|null=me??(myRider?[myRider.latitude,myRider.longitude]:null);
+ const others=activeRiders.filter(r=>r.user_id!==session?.user.id);
+ const routeKey=origin?`${origin[0].toFixed(3)},${origin[1].toFixed(3)}|${others.map(r=>`${r.user_id}:${r.latitude.toFixed(3)},${r.longitude.toFixed(3)}`).join('|')}`:'';
+ useEffect(()=>{
+  if(!routeKey||!origin){Promise.resolve().then(()=>setRoutes({}));return;}
+  const ctl=new AbortController();
+  for(const r of others)roadRoute(origin,[r.latitude,r.longitude],ctl.signal).then(route=>{if(!ctl.signal.aborted)setRoutes(prev=>({...prev,[r.user_id]:route}));});
+  return()=>ctl.abort();
+  // se recalcula solo cuando cambian posiciones redondeadas (~100 m)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+ },[routeKey]);
  const finished=rides.filter(r=>r.status==='finished'),week=finished;
  const pins=activeRiders.map(r=>({id:r.user_id,name:r.display_name,pos:[r.latitude,r.longitude] as [number,number],me:r.user_id===session?.user.id}));
  if(me)pins.push({id:'observer',name:'Mi posición',pos:me,me:true});
@@ -121,8 +145,8 @@ export default function Radar(){
  return <main className="app-shell">{header}<div className="dashboard-heading"><div><span className="eyebrow">TU CENTRO DE RODADAS</span><h1>Vamos juntos.</h1><p>Todo tu grupo, en un solo lugar.</p></div><div className="group-picker"><label htmlFor="group">Tu grupo</label><select id="group" value={gid} onChange={e=>{setGid(e.target.value);setRiders([]);setRides([]);}}>{!activeGroups.length&&<option value="">Crea o únete a un grupo</option>}{activeGroups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select></div></div>{demo&&<p className="demo-notice">Datos ficticios para explorar el diseño. No hay personas reales compartiendo ubicación.</p>}{!connected&&<p className="alert">Sin conexión. Las posiciones mostradas pueden estar desactualizadas.</p>}{error&&<p role="alert" className="alert">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}<div className="stats-grid"><Metric title="En el radar" value={String(activeRiders.length)} suffix="compañeros"/><Metric title="Kilómetros recientes · grupo" value={demo?'345.6':(week.reduce((s,r)=>s+r.distance_m,0)/1000).toFixed(1)} suffix="historial reciente, hasta 100 salidas"/><Metric title="Tiempo activo reciente" value={demo?fmtDur(57300):fmtDur(week.reduce((s,r)=>s+r.duration_s,0))} suffix="historial reciente del grupo"/><Metric title="Salidas terminadas" value={demo?'10':String(finished.length)} suffix="últimas 100 del grupo"/></div><nav className="tabs" aria-label="Vistas del radar">{[['radar','◎ Radar en vivo'],['history','⌁ Salidas'],['performance','▥ Desempeño'],['group','♧ Mi grupo']].map(([id,label])=><button key={id} className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}</nav>
  {group&&<GroupSafety key={`safety-${group.id}-${demo}`} client={client} groupId={group.id} groupName={group.name} userId={session?.user.id||'demo-observer'} demo={demo} position={me}/>}
  {tab==='performance'&&<MemberPerformance key={`stats-${gid}-${demo}`} client={client} groupId={gid} userId={session?.user.id||'demo-observer'} demo={demo}/>}
- {tab==='radar'&&<div className="radar-grid"><section className="map-panel"><div className="panel-heading"><div><h2>{group?.name||'El camino empieza aquí'}</h2><span>{demo?'Mapa de ejemplo':lastSync?`Actualizado ${lastSync.toLocaleTimeString('es-CO')}`:'Esperando una salida'}</span></div><button className="ghost" onClick={locate} disabled={locBusy}>{locBusy?'Buscando…':'Ubicarme'}</button></div>{locMsg&&<p className="map-caption" role="status">{locMsg}</p>}<div className="radar-map"><MapView pins={pins}/></div><div className="map-caption">Solo posiciones de salidas activas, recibidas en los últimos 2 minutos. Distancias en línea recta. · v3</div></section><aside className="rider-panel"><div className="panel-heading"><h2>En el camino</h2><span>{activeRiders.length} visibles</span></div>{activeRiders.length===0?<div className="empty"><span>◎</span><h3>El radar está tranquilo</h3><p>Cuando un compañero inicie una salida desde la app móvil, aparecerá aquí.</p>{!group&&<button className="primary" onClick={()=>setTab('group')}>Crear mi grupo</button>}</div>:activeRiders.map((r,i)=><article className="rider" key={r.user_id}><div className={`avatar avatar-${i%3}`}>{r.display_name.slice(0,1)}</div><div className="rider-info"><h3>{r.display_name}</h3><span>{demo?'Posición de ejemplo':fmtAgo(r.recorded_at)} · ±{Math.round(r.accuracy_m)} m</span><p>{r.speed_mps===null?'Velocidad no disponible':`${(r.speed_mps*3.6).toFixed(1)} km/h`}{me&&` · ${fmtKm(haversine(me,[r.latitude,r.longitude]))} de ti`}</p></div></article>)}<div className="rider-note"><b>Comparte solo al rodar.</b><p>Al pausar o terminar tu salida, tu posición deja de aparecer en el radar.</p></div></aside></div>}
- {tab==='history'&&<section className="content-panel"><div className="panel-heading"><h2>Las últimas salidas del grupo</h2><span>El recorrido GPS es privado</span></div>{rides.length===0?<div className="empty"><h3>Aún no hay salidas registradas</h3><p>Las salidas de la app aparecerán aquí cuando se sincronicen.</p></div>:<div className="table-scroll"><table><thead><tr><th>Salida</th><th>Fecha</th><th>Distancia</th><th>Tiempo activo</th><th>Estado</th><th>Mi recorrido</th></tr></thead><tbody>{rides.map(r=><tr key={r.id}><td>{r.name}</td><td>{new Date(r.started_at).toLocaleDateString('es-CO')}</td><td>{fmtKm(r.distance_m)}</td><td>{fmtDur(r.duration_s)}</td><td>{r.status==='finished'?'Terminada':r.status==='paused'?'Pausada':'En curso'}</td><td>{r.user_id===session?.user.id&&<button className="ghost" disabled={busy} onClick={()=>void exportRide(r)}>Descargar GPX</button>}</td></tr>)}</tbody></table></div>}</section>}
+ {tab==='radar'&&<div className="radar-grid"><section className="map-panel"><div className="panel-heading"><div><h2>{group?.name||'El camino empieza aquí'}</h2><span>{demo?'Mapa de ejemplo':lastSync?`Actualizado ${lastSync.toLocaleTimeString('es-CO')}`:'Esperando una salida'}</span></div><button className="ghost" onClick={locate} disabled={locBusy}>{locBusy?'Buscando…':'Ubicarme'}</button></div>{locMsg&&<p className="map-caption" role="status">{locMsg}</p>}<div className="radar-map"><MapView pins={pins} routes={others.flatMap(r=>routes[r.user_id]?[{id:r.user_id,coords:routes[r.user_id]!.coords}]:[])} trails={activeRiders.filter(r=>(trails[r.user_id]?.length||0)>1).map(r=>({id:r.user_id,coords:trails[r.user_id]}))}/></div><div className="map-caption">Solo posiciones de salidas activas, recibidas en los últimos 2 minutos. Línea azul: ruta por calles hasta cada compañero. Línea naranja: su recorrido reciente. · v4</div></section><aside className="rider-panel"><div className="panel-heading"><h2>En el camino</h2><span>{activeRiders.length} visibles</span></div>{activeRiders.length===0?<div className="empty"><span>◎</span><h3>El radar está tranquilo</h3><p>Cuando un compañero inicie una salida desde la app móvil, aparecerá aquí.</p>{!group&&<button className="primary" onClick={()=>setTab('group')}>Crear mi grupo</button>}</div>:activeRiders.map((r,i)=><article className="rider" key={r.user_id}><div className={`avatar avatar-${i%3}`}>{r.display_name.slice(0,1)}</div><div className="rider-info"><h3>{r.display_name}</h3><span>{demo?'Posición de ejemplo':fmtAgo(r.recorded_at)} · ±{Math.round(r.accuracy_m)} m</span><p>{r.speed_mps===null?'Velocidad no disponible':`${(r.speed_mps*3.6).toFixed(1)} km/h`}{r.user_id!==session?.user.id&&origin&&(routes[r.user_id]?` · ${fmtKm(routes[r.user_id]!.distance_m)} por ruta · ~${fmtDur(routes[r.user_id]!.duration_s)} en bici`:r.user_id in routes?' · ruta no disponible':' · calculando ruta…')}</p></div></article>)}<div className="rider-note"><b>Comparte solo al rodar.</b><p>Al pausar o terminar tu salida, tu posición deja de aparecer en el radar.</p></div></aside></div>}
+ {tab==='history'&&<section className="content-panel"><div className="panel-heading"><h2>Las últimas salidas del grupo</h2><span>El recorrido GPS es privado</span></div>{viewRide&&<div className="route-viewer"><div className="panel-heading"><h3>{viewRide.name}</h3><button className="ghost" onClick={()=>setViewRide(null)}>Cerrar mapa</button></div><div className="radar-map"><MapView pins={[]} track={viewRide.track}/></div><div className="map-caption">Tu recorrido GPS · {fmtKm(viewRide.km)} · verde = inicio, rojo = final. Solo tú lo ves.</div></div>}{rides.length===0?<div className="empty"><h3>Aún no hay salidas registradas</h3><p>Las salidas de la app aparecerán aquí cuando se sincronicen.</p></div>:<div className="table-scroll"><table><thead><tr><th>Salida</th><th>Fecha</th><th>Distancia</th><th>Tiempo activo</th><th>Estado</th><th>Mi recorrido</th></tr></thead><tbody>{rides.map(r=><tr key={r.id}><td>{r.name}</td><td>{new Date(r.started_at).toLocaleDateString('es-CO')}</td><td>{fmtKm(r.distance_m)}</td><td>{fmtDur(r.duration_s)}</td><td>{r.status==='finished'?'Terminada':r.status==='paused'?'Pausada':'En curso'}</td><td>{r.user_id===session?.user.id&&<><button className="ghost" disabled={busy} onClick={()=>void showRide(r)}>Ver recorrido</button> <button className="ghost" disabled={busy} onClick={()=>void exportRide(r)}>Descargar GPX</button></>}</td></tr>)}</tbody></table></div>}</section>}
  {tab==='group'&&<section className="group-grid">{group&&<article className="content-panel"><span className="eyebrow">TU COMUNIDAD</span><h2>{group.name}</h2><p>Invita a tus compañeros con este código. Al unirse podrán ver las estadísticas del grupo y las posiciones durante las salidas activas.</p><code className="invite-code">{group.invite_code}</code><button className="ghost" disabled={demo} onClick={()=>void action(async()=>{await navigator.clipboard.writeText(group.invite_code);setNotice('Código copiado.');})}>Copiar código</button></article>}{!demo&&<article className="content-panel"><h2>Encuentra a tu grupo</h2><label>Tu nombre en el grupo<input required minLength={2} maxLength={60} value={name} onChange={e=>setName(e.target.value)} placeholder="Como te conocen tus compañeros"/></label><form onSubmit={e=>{e.preventDefault();void groupAction(false);}}><label>Crear un grupo<input required minLength={2} maxLength={80} value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder="Nombre del grupo"/></label><button className="primary" disabled={busy||name.trim().length<2}>Crear grupo</button></form><div className="divider">o únete a uno existente</div><form onSubmit={e=>{e.preventDefault();void groupAction(true);}}><label>Código de invitación<input required value={code} onChange={e=>setCode(e.target.value)} placeholder="Pega el código del grupo"/></label><button className="ghost full" disabled={busy||name.trim().length<2}>Unirme al grupo</button></form></article>}</section>}
  <footer>SELFIE BIKE RADAR <span>Tu ubicación, solo cuando tú decides.</span></footer></main>;
 }
