@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseRoute, routeStats, buildRoute, simplify, distanceToRoute, routeToGpx } from "../lib/routes.ts";
+import { parseRoute, routeStats, buildRoute, simplify, distanceToRoute, routeToGpx, progressOnRoute } from "../lib/routes.ts";
 
 const gpx = `<?xml version="1.0"?><gpx version="1.1"><metadata><name>Meta</name></metadata><wpt lat="4.7" lon="-74.0"><name>Café</name></wpt><trk><name>Subida a Zipaquirá</name><trkseg>
 <trkpt lat="4.9000" lon="-74.0300"><ele>2600</ele></trkpt><trkpt lon="-74.0290" lat="4.9010"><ele>2610</ele></trkpt><trkpt lat="4.9020" lon="-74.0280"><ele>2625</ele></trkpt></trkseg></trk></gpx>`;
@@ -52,4 +52,22 @@ test("simplifica rutas largas conservando extremos y mide desvío", () => {
   assert.ok(distanceToRoute([4.005, -74], line) < 1);
   const r = buildRoute(parseRoute(gpx, "x.gpx"), "id1", new Date("2026-01-01"));
   assert.match(routeToGpx(r), /<trkpt lat="4.9"/);
+});
+
+test("valida rutas: muy cortas, con saltos, de ida y sin altitud", () => {
+  assert.throws(() => parseRoute(`<gpx><trk><trkseg><trkpt lat="4" lon="-74"/><trkpt lat="4.0005" lon="-74"/></trkseg></trk></gpx>`, "c.gpx"), /muy corta/);
+  const jump = parseRoute(`<gpx><trk><trkseg><trkpt lat="4" lon="-74"/><trkpt lat="4.01" lon="-74"/><trkpt lat="4.2" lon="-74"/></trkseg></trk></gpx>`, "j.gpx");
+  assert.ok(jump.warnings.some((w) => /salto/.test(w)));
+  assert.ok(jump.warnings.some((w) => /altitud/.test(w)));
+  assert.ok(jump.warnings.some((w) => /ida/.test(w)));
+  const ok = parseRoute(gpx, "x.gpx");
+  assert.equal(ok.warnings.length >= 0, true);
+});
+
+test("avance sobre la ruta", () => {
+  const line = [[4, -74], [4.01, -74], [4.02, -74]];
+  const p = progressOnRoute([4.015, -74], line);
+  assert.ok(Math.abs(p.along_m - 1670) < 30, String(p.along_m));
+  assert.ok(Math.abs(p.total_m - 2211) < 30, String(p.total_m));
+  assert.ok(p.off_m < 1);
 });

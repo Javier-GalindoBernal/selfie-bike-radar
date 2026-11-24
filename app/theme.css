@@ -86,3 +86,9 @@ body{background:var(--paper);color:var(--ink);font-family:ui-rounded,"SF Pro Rou
 .route-chip{margin:8px 0;padding:10px 14px;border-radius:12px;background:var(--leaf-soft);color:var(--leaf-dark);font-size:14px}
 .route-chip.off{background:#fff0ed;color:#b3261e;font-weight:700}
 @media(min-width:761px){.route-list li{grid-template-columns:1fr auto;align-items:center}}
+
+.route-pick{display:grid;gap:8px;width:100%;max-width:420px;text-align:left}
+.route-pick label{font-weight:700;color:var(--leaf-dark)}
+.route-pick select{padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;color:var(--ink)}
+.route-warn{margin:0;padding:8px 12px;border-radius:10px;background:#fff6dd;color:#7a5200;font-size:13px}
+.site-credit{margin-top:auto;padding:18px 16px 22px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--muted);border-top:1px solid var(--line)}

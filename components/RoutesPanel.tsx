@@ -76,6 +76,7 @@ export default function RoutesPanel() {
           <label htmlFor="route-name">Nombre de la ruta</label>
           <input id="route-name" value={draft.name} maxLength={120} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
           <p className="map-caption">{draft.parsed.format} · {fmtKm(draftRoute.distance_m)} · desnivel +{Math.round(draftRoute.gain_m)} m · {draft.parsed.coords.length.toLocaleString('es-CO')} puntos</p>
+          {draft.parsed.warnings.map(w => <p key={w} className="route-warn">⚠ {w}</p>)}
           <div className="rec-actions">
             <button className="rec-btn go" onClick={save}>Guardar y seguir esta ruta</button>
             <button className="rec-btn stop" onClick={() => setDraft(null)}>Cancelar</button>

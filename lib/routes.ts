@@ -2,7 +2,7 @@ import { haversine } from "./geo.ts";
 
 export type LatLng = [number, number];
 export type Route = { id: string; name: string; created: string; distance_m: number; gain_m: number; coords: LatLng[]; source: string };
-export type Parsed = { name: string; coords: LatLng[]; ele: (number | null)[]; format: string };
+export type Parsed = { name: string; coords: LatLng[]; ele: (number | null)[]; format: string; warnings: string[] };
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_POINTS = 300_000;
@@ -128,7 +128,24 @@ export function parseRoute(text: string, fileName = "Ruta"): Parsed {
   if (pts.length > MAX_POINTS) throw new Error("La ruta tiene demasiados puntos (máximo 300 000).");
   const good = pts.filter(valid);
   if (good.length < 2) throw new Error(`No encontré un recorrido en el archivo ${format}. Debe contener un trazado (track o ruta) con al menos 2 puntos.`);
-  return { name: (name || base).slice(0, 120), coords: good.map((p) => [p.lat, p.lng] as LatLng), ele: good.map((p) => p.ele), format };
+  const coords = good.map((p) => [p.lat, p.lng] as LatLng);
+  const ele = good.map((p) => p.ele);
+  return { name: (name || base).slice(0, 120), coords, ele, format, warnings: validateRoute(coords, ele) };
+}
+
+/** Comprueba que el trazado sirva para seguirlo en bici. Lanza error si no sirve y devuelve avisos si es dudoso. */
+export function validateRoute(coords: LatLng[], ele: (number | null)[]): string[] {
+  const warnings: string[] = [];
+  const { distance_m } = routeStats(coords, ele);
+  if (distance_m < 200) throw new Error("La ruta es muy corta (menos de 200 m). Revisa que sea el archivo correcto.");
+  if (distance_m > 3_000_000) throw new Error("La ruta supera los 3 000 km: parece tener coordenadas erróneas.");
+  let jumps = 0;
+  for (let i = 1; i < coords.length; i++) if (haversine(coords[i - 1], coords[i]) > 5000) jumps++;
+  if (jumps) warnings.push(`El trazado tiene ${jumps} salto${jumps > 1 ? "s" : ""} de más de 5 km entre puntos: puede estar incompleto o unir tramos separados.`);
+  const first = coords[0], last = coords[coords.length - 1];
+  if (haversine(first, last) > 0.7 * distance_m) warnings.push("Es una ruta de ida (el inicio y la meta están lejos).");
+  if (!ele.some((e) => e !== null)) warnings.push("El archivo no trae altitud: no se puede calcular el desnivel.");
+  return warnings;
 }
 
 export function routeStats(coords: LatLng[], ele: (number | null)[]) {
@@ -211,4 +228,22 @@ export function distanceToRoute(pos: LatLng, coords: LatLng[]): number {
     if (d < best) best = d;
   }
   return best;
+}
+
+/** Avance sobre la ruta: metros recorridos hasta el punto más cercano, total y desvío. */
+export function progressOnRoute(pos: LatLng, coords: LatLng[]): { along_m: number; total_m: number; off_m: number } {
+  const kx = Math.cos((pos[0] * Math.PI) / 180) * 111320, ky = 110540;
+  const px = pos[1] * kx, py = pos[0] * ky;
+  let best = Infinity, along = 0, cum = 0, total = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const seg = haversine(coords[i], coords[i + 1]);
+    const ax = coords[i][1] * kx, ay = coords[i][0] * ky, bx = coords[i + 1][1] * kx, by = coords[i + 1][0] * ky;
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2)) : 0;
+    const d = Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+    if (d < best) { best = d; along = cum + t * seg; }
+    cum += seg;
+  }
+  total = cum;
+  return { along_m: along, total_m: total, off_m: best };
 }

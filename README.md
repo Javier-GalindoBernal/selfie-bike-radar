@@ -46,7 +46,7 @@ La primera pantalla pide **entrar o crear cuenta** (nombre, correo y contraseña
 
 ## Cargar rutas (GPX, TCX, KML, GeoJSON)
 
-La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wikiloc, Garmin, Google Earth…), ver distancia y desnivel, guardarla y «seguirla»: el trazado se dibuja punteado en el mapa del radar y en el de «Grabar», con aviso si te desvías más de 60 m. Las rutas se guardan solo en el navegador del teléfono (hasta 30, simplificadas a ~2500 puntos) y no se comparten con el grupo. No se admite FIT.
+La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wikiloc, Garmin, Google Earth…), ver distancia y desnivel, guardarla y «seguirla»: el trazado se dibuja punteado en el mapa del radar y en el de «Grabar», con aviso si te desvías más de 60 m. Al cargar una ruta se valida (mínimo 200 m, sin coordenadas absurdas) y se avisa de saltos, rutas de ida o falta de altitud. En «Grabar» se elige la ruta a seguir antes de iniciar y durante la salida se muestra el avance y el desvío. Las rutas se guardan solo en el navegador del teléfono (hasta 30, simplificadas a ~2500 puntos) y no se comparten con el grupo. No se admite FIT.
 
 ## Grabar salidas desde la web
 

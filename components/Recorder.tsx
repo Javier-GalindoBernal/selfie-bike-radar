@@ -4,8 +4,8 @@ import dynamic from 'next/dynamic';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fmtKm } from '@/lib/geo';
 import { IconPause, IconPlay, IconStop } from './Icons';
-import { distanceToRoute } from '@/lib/routes';
-import { useRoutes } from '@/lib/routeStore';
+import { progressOnRoute } from '@/lib/routes';
+import { setActiveRoute, useRoutes } from '@/lib/routeStore';
 import { applySample, finish, newRecState, pause, resume, tick, toSegments, type RecState } from '@/lib/recording';
 
 const MapView = dynamic(() => import('./Map'), { ssr: false, loading: () => <div className="map-loading">Cargando el mapa…</div> });
@@ -32,7 +32,7 @@ function save(s: RecState | null, userId: string) {
 const msg = (e: unknown) => (typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e));
 
 export default function Recorder({ client, userId, groupId, groupName, demo }: { client: SupabaseClient | null; userId: string; groupId: string; groupName: string; demo: boolean }) {
-  const { active: route } = useRoutes();
+  const { active: route, routes } = useRoutes();
   const [s, setS] = useState<RecState | null>(null);
   const ref = useRef<RecState | null>(null);
   const [name, setName] = useState('Salida en bici');
@@ -248,7 +248,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   void clock;
   const pending = s ? s.points.length - s.syncedCount : 0;
   const done = s?.status === 'finished' && s.rideCreated && pending === 0 && !syncError;
-  const off = route && last ? distanceToRoute([last.lat, last.lng], route.coords) : null;
+  const prog = route && last ? progressOnRoute([last.lat, last.lng], route.coords) : null;
   const avg = s && s.activeMs > 0 ? (s.distance / (s.activeMs / 1000)) * 3.6 : 0;
   const cur = last && last.speed !== null ? last.speed * 3.6 : avg;
 
@@ -265,7 +265,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
           <label htmlFor="rec-name">Nombre de la salida</label>
           <input id="rec-name" value={name} maxLength={120} onChange={e => setName(e.target.value)} />
           <button className="rec-go" disabled={busy} onClick={() => void start()} aria-label="Iniciar salida"><IconPlay size={44} /><span>INICIAR</span></button>
-          {route ? <p className="route-chip">⚑ Siguiendo: <b>{route.name}</b> · {fmtKm(route.distance_m)}</p> : <p className="map-caption">Sin ruta elegida. Puedes cargar un GPX en la pestaña «Rutas» para verlo en el mapa mientras grabas.</p>}
+          <div className="route-pick"><label htmlFor="rec-route">Ruta a seguir</label><select id="rec-route" value={route?.id ?? ''} onChange={e => setActiveRoute(e.target.value || null)}><option value="">Sin ruta (salida libre)</option>{routes.map(x => <option key={x.id} value={x.id}>{x.name} · {fmtKm(x.distance_m)}</option>)}</select>{route ? <p className="route-chip">⚑ Al iniciar verás <b>{route.name}</b> ({fmtKm(route.distance_m)}, +{Math.round(route.gain_m)} m) punteada en el mapa, con tu avance y aviso si te sales.</p> : <p className="map-caption">{routes.length ? 'Elige una ruta guardada para seguirla.' : 'Carga un GPX en la pestaña «Rutas» para seguirlo aquí.'}</p>}</div>
           <p className="map-caption">Mientras la salida esté activa, tu grupo verá tu posición en el radar. Al pausar o finalizar dejas de compartirla. Mantén esta página abierta y la pantalla encendida: en iPhone y Android el navegador detiene el GPS si bloqueas el teléfono o cambias de app.</p>
         </div>
       )}
@@ -281,7 +281,8 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             {last ? ` · precisión ±${Math.round(last.accuracy)} m` : s.status === 'active' ? ' · esperando la primera señal GPS…' : ''}
             {s.status === 'active' && !wake ? ' · no se pudo mantener la pantalla encendida: no la bloquees' : ''}
           </p>
-          {route && s.status === 'active' && off !== null && <p className={off > 60 ? 'route-chip off' : 'route-chip'} role="status">{off > 60 ? `⚠ Fuera de ruta · a ${fmtKm(off)} del trazado` : `✓ En la ruta · a ${Math.round(off)} m del trazado`}</p>}
+          {route && s.status !== 'finished' && !prog && <p className="route-chip" role="status">⚑ Siguiendo «{route.name}» · {fmtKm(route.distance_m)}. Ve al inicio (▶ verde en el mapa) cuando tengas señal GPS.</p>}
+          {route && s.status !== 'finished' && prog && <p className={prog.off_m > 60 ? 'route-chip off' : 'route-chip'} role="status">{prog.off_m > 60 ? `⚠ Fuera de ruta · a ${fmtKm(prog.off_m)} del trazado` : `✓ En la ruta · avance ${fmtKm(prog.along_m)} de ${fmtKm(prog.total_m)} · faltan ${fmtKm(Math.max(prog.total_m - prog.along_m, 0))}`}</p>}
           <div className="rec-actions">
             {s.status === 'active' && <button className="rec-btn pause" onClick={doPause}><IconPause size={22} /> Pausar</button>}
             {s.status === 'paused' && <button className="rec-btn go" onClick={doResume}><IconPlay size={22} /> Reanudar</button>}
