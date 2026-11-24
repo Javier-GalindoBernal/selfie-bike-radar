@@ -254,7 +254,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   const prog = route && last ? progressOnRoute([last.lat, last.lng], route.coords) : null;
   const offKey = prog && prog.off_m > 60 && last ? `${last.lat.toFixed(3)},${last.lng.toFixed(3)}` : '';
   const lastPos = last ? ([last.lat, last.lng] as [number, number]) : null;
-  const cur = s ? displaySpeedKmh(s, clock || Date.now()) : 0;
+  const cur = s && clock ? displaySpeedKmh(s, clock) : 0;
   const still = !!s && s.status === 'active' && !!last && cur === 0;
 
   useEffect(() => {
