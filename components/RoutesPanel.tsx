@@ -17,11 +17,12 @@ const MapView = dynamic(() => import('./Map'), { ssr: false, loading: () => <div
 
 type GroupRoute = { id: string; name: string; distance_m: number; gain_m: number; source: string; author: string; mine: boolean };
 
-export default function RoutesPanel({ client = null, groupId = '' }: { client?: SupabaseClient | null; groupId?: string }) {
+export default function RoutesPanel({ client = null, groupId = '', isManager = false }: { client?: SupabaseClient | null; groupId?: string; isManager?: boolean }) {
   const { routes, activeId } = useRoutes();
   const input = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<{ parsed: Parsed; file: string; name: string; fixed?: [number, number][]; gain?: number } | null>(null);
   const [building, setBuilding] = useState(false);
+  const [shareDraft, setShareDraft] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [preview, setPreview] = useState<Route | null>(null);
   const [error, setError] = useState('');
@@ -95,6 +96,7 @@ export default function RoutesPanel({ client = null, groupId = '' }: { client?: 
       setActiveRoute(r.id);
       setInfo(`Ruta «${r.name}» guardada y lista para seguir.`);
       setDraft(null);
+      if (shareDraft) void share(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo guardar la ruta.');
     }
@@ -140,7 +142,7 @@ export default function RoutesPanel({ client = null, groupId = '' }: { client?: 
       {error && <p role="alert" className="alert">{error}</p>}
       {info && <p role="status" className="notice">{info}</p>}
 
-      {building && <RouteBuilder onCancel={() => setBuilding(false)} onSave={(r) => { try { addRoute(r); setActiveRoute(r.id); setInfo(`Ruta «${r.name}» guardada y lista para seguir.`); setBuilding(false); } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la ruta.'); } }} />}
+      {building && <RouteBuilder canShare={!!client && !!groupId} onCancel={() => setBuilding(false)} onSave={(r, shareIt) => { try { addRoute(r); setActiveRoute(r.id); setInfo(`Ruta «${r.name}» guardada y lista para seguir.`); setBuilding(false); if (shareIt) void share(r); } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la ruta.'); } }} />}
       {draft && draftRoute && (
         <div className="route-draft">
           <label htmlFor="route-name">Nombre de la ruta</label>
@@ -148,6 +150,7 @@ export default function RoutesPanel({ client = null, groupId = '' }: { client?: 
           <p className="map-caption">{draft.parsed.format} · {fmtKm(draftRoute.distance_m)} · desnivel +{Math.round(draftRoute.gain_m)} m · {(eff?.coords.length ?? 0).toLocaleString('es-CO')} puntos</p>
           {draft.parsed.warnings.filter(w => !(/recto/.test(w) && !straightRuns)).map(w => <p key={w} className="route-warn">⚠ {w}</p>)}
           {straightRuns > 0 && <button className="ghost" disabled={fixing} onClick={() => void fix()}>{fixing ? 'Corrigiendo…' : 'Corregir por calles'}</button>}
+          {client && groupId && <label className="share-check"><input type="checkbox" checked={shareDraft} onChange={(e) => setShareDraft(e.target.checked)} /> Compartir también con el grupo (todos podrán verla y elegirla en una salida)</label>}
           <div className="rec-actions">
             <button className="rec-btn go" onClick={save}>Guardar y seguir esta ruta</button>
             <button className="rec-btn stop" onClick={() => setDraft(null)}>Cancelar</button>
@@ -185,7 +188,7 @@ export default function RoutesPanel({ client = null, groupId = '' }: { client?: 
                   <div className="route-info"><strong>{g.name}</strong><span>{fmtKm(g.distance_m)} · +{Math.round(g.gain_m)} m · {g.source} · por {g.author}</span></div>
                   <div className="route-actions">
                     <button className="ghost" onClick={() => void adopt(g)}>Guardar y seguir</button>
-                    {g.mine && <button className="ghost danger" onClick={() => { if (window.confirm(`¿Quitar «${g.name}» de las rutas del grupo?`)) void removeShared(g); }}>Quitar</button>}
+                    {(g.mine || isManager) && <button className="ghost danger" onClick={() => { if (window.confirm(`¿Quitar «${g.name}» de las rutas del grupo?`)) void removeShared(g); }}>Quitar</button>}
                   </div>
                 </li>
               ))}

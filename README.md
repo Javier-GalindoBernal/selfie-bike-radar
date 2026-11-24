@@ -68,6 +68,8 @@ Ejecutar una vez `supabase/migrations/20261127_group_events_privacy.sql` (idempo
 
 **Llegar tarde y alcanzar al grupo:** ejecutar también `supabase/migrations/20261128_event_trails.sql`. Quien esté apuntado a una salida abierta ve en el radar a los demás de esa salida **aunque todavía no haya salido**, con el rastro por donde pasaron (línea naranja) y la ruta por calles hasta ellos (línea verde, tras «Ubicarme»). Solo se muestra el rastro de salidas activas (al pausar desaparece), solo mientras la salida está abierta, sin los primeros 250 m desde el inicio de cada persona (su casa) y aligerado a ~400 puntos. Bajarse de la salida revoca el acceso.
 
+**Borrar salidas grabadas:** ejecutar `supabase/migrations/20261129_delete_rides.sql`. En «Rutas → Historial de salidas grabadas», cada persona borra las suyas (y las de menos de 100 m de una vez); un administrador del grupo puede borrar cualquiera. Solo se borran salidas finalizadas y su recorrido GPS se elimina con ellas. Desde una salida propia se puede **compartir su ruta con el grupo**.
+
 **Rutas compartidas:** cada persona puede compartir una ruta de «Mis rutas» con el grupo («Compartir con el grupo»); las demás la guardan y la siguen, o el organizador la elige al crear una salida. Quien la compartió o un administrador puede quitarla.
 
 ## Cómo entra la gente al grupo

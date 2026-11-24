@@ -22,7 +22,8 @@ function Center({ to }: { to: LatLng | null }) {
 }
 
 /** Editor de rutas estilo Strava: toca el mapa para marcar puntos y cada tramo se traza por calles y ciclovías. */
-export default function RouteBuilder({ onSave, onCancel, start }: { onSave: (r: Route) => void; onCancel: () => void; start?: LatLng }) {
+export default function RouteBuilder({ onSave, onCancel, start, canShare = false }: { onSave: (r: Route, share: boolean) => void; onCancel: () => void; start?: LatLng; canShare?: boolean }) {
+  const [shareIt, setShareIt] = useState(false);
   const [wps, setWps] = useState<LatLng[]>([]);
   const [legs, setLegs] = useState<LegState[]>([]);
   const [name, setName] = useState('Mi ruta');
@@ -80,7 +81,7 @@ export default function RouteBuilder({ onSave, onCancel, start }: { onSave: (r: 
   function save() {
     const coords = joinLegs(done);
     const r = buildRoute({ name, coords, ele: coords.map(() => null), format: 'Dibujada', warnings: [] }, crypto.randomUUID(), new Date(), name);
-    onSave({ ...r, distance_m: dist });
+    onSave({ ...r, distance_m: dist }, shareIt);
   }
 
   return (
@@ -112,6 +113,7 @@ export default function RouteBuilder({ onSave, onCancel, start }: { onSave: (r: 
       </div>
       <label htmlFor="built-name" className="route-label">Nombre de la ruta</label>
       <input id="built-name" className="route-input" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
+      {canShare && <label className="share-check"><input type="checkbox" checked={shareIt} onChange={(e) => setShareIt(e.target.checked)} /> Compartir también con el grupo (todos podrán verla y elegirla en una salida)</label>}
       <div className="rec-actions">
         <button className="rec-btn go" disabled={!canSave} onClick={save}>Guardar ruta</button>
         <button className="rec-btn stop" onClick={onCancel}>Cancelar</button>
