@@ -23,7 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="es"
       className="h-full antialiased"
     >
-      <body className="min-h-full flex flex-col">{children}<div className="site-credit">Creada por Global Analitik SAS - Javier Galindo</div></body>
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}<div className="site-credit">Creada por Global Analitik SAS - Javier Galindo</div></body>
     </html>
   );
 }
