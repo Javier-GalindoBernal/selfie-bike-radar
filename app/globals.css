@@ -9,3 +9,7 @@
 
 .radar-map .leaflet-container{height:100%;width:100%;background:#dfe7dc;touch-action:pan-x pan-y}
 .route-viewer{margin-bottom:22px}.route-viewer h3{margin:0}
+.recorder{padding:0 20px 22px}.rec-start{display:grid;gap:12px;max-width:520px}.rec-start input{padding:13px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.rec-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0}.rec-stats div{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:12px}.rec-stats span{display:block;font-size:12px;color:#5b6b66}.rec-stats strong{font-size:26px;color:var(--ink)}
+.rec-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}.rec-big{flex:1 1 140px;padding:16px 14px;font-size:17px;font-weight:700}
+@media(max-width:760px){.recorder{padding:0 14px 18px}.rec-stats strong{font-size:20px}}

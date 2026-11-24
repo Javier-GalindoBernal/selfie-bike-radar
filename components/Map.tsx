@@ -14,6 +14,14 @@ const icon = (label: string, me?: boolean, color?: string) =>
     iconAnchor: [16, 16],
   });
 
+function Follow({ pos }: { pos?: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (pos && !map.getBounds().pad(-0.2).contains(pos)) map.panTo(pos);
+  }, [pos, map]);
+  return null;
+}
+
 function Fit({ points, fitKey }: { points: [number, number][]; fitKey: string }) {
   const map = useMap();
   useEffect(() => {
@@ -31,14 +39,16 @@ export default function Map({
   routes = [],
   trails = [],
   track = [],
+  follow = false,
 }: {
   pins: Pin[];
   routes?: Line[];
   trails?: Line[];
   track?: [number, number][][];
+  follow?: boolean;
 }) {
   const fitPoints: [number, number][] = [...pins.map((p) => p.pos), ...routes.flatMap((r) => r.coords), ...track.flat()];
-  const fitKey = [pins.map((p) => p.id).join(","), routes.map((r) => r.id).join(","), track.map((t) => t.length).join(",")].join("|");
+  const fitKey = [pins.map((p) => p.id).join(","), routes.map((r) => r.id).join(","), follow ? String(track.length) : track.map((t) => t.length).join(",")].join("|");
   const first = track[0]?.[0];
   const lastSeg = track[track.length - 1];
   const last = lastSeg?.[lastSeg.length - 1];
@@ -49,6 +59,7 @@ export default function Map({
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
       <Fit points={fitPoints} fitKey={fitKey} />
+      {follow && <Follow pos={pins[0]?.pos} />}
       {track.map((seg, i) => (
         <Polyline key={`t${i}`} positions={seg} pathOptions={{ color: "#fc4c02", weight: 5, opacity: 0.9 }} />
       ))}

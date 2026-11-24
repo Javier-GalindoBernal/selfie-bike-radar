@@ -40,6 +40,10 @@ Abrir http://localhost:3001. Compilación: `npm run build`; servidor de producci
 
 Sin clave pública configurada sigue disponible «Explorar una vista de ejemplo». El dashboard es para consultar, no para grabar con el navegador bloqueado. `/share` explica el nuevo flujo. Las API abiertas del prototipo y las rutas Strava devuelven HTTP 410; sus fuentes anteriores se conservan como texto en `legacy-strava/`.
 
+## Grabar salidas desde la web
+
+La pestaña «● Grabar» registra una salida con el GPS del navegador: tiempo activo, distancia, velocidad, pausa/reanudar, mapa con el trazado y envío a tu cuenta (los compañeros te ven en el radar mientras estés activo). Si se corta la red, los puntos quedan en el teléfono y se envían al volver. **Limitación del navegador:** el GPS web se detiene si bloqueas la pantalla o cambias de app; la página pide mantener la pantalla encendida, pero no sustituye a la app nativa para salidas largas. Aún no se ha probado una salida real en un teléfono.
+
 ## App móvil
 
 Ver `MOBILE.md` y `mobile/README.md`. No está publicada en tiendas ni se ha verificado una salida en dispositivos físicos. Compilar código Flutter no equivale a garantizar GPS en segundo plano: hay que probar bloqueo de pantalla, permisos, ahorro de batería, pausa, recuperación de red y exportación en Android y iPhone reales.
