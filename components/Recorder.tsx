@@ -36,6 +36,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  const [discard, setDiscard] = useState(false);
   const [openRide, setOpenRide] = useState<{ id: string; name: string } | null>(null);
   const [syncError, setSyncError] = useState('');
   const [wake, setWake] = useState(true);
@@ -90,7 +91,9 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
       const cur = ref.current;
       if (cur && cur.rideId === snap.rideId) commit({ ...cur, rideCreated: created, syncedCount: Math.max(cur.syncedCount, synced) }, true);
     } catch (e) {
-      setSyncError(/radar_one_open_ride|duplicate key/.test(msg(e)) ? 'Ya tienes otra salida abierta (¿en otro dispositivo?). Ciérrala para sincronizar esta.' : /schema cache|does not exist/.test(msg(e)) ? 'Falta activar las tablas en Supabase.' : 'Sin conexión: tu recorrido se guarda en este teléfono y se enviará al volver la red.');
+      const m = msg(e);
+      const code = typeof e === 'object' && e && 'code' in e ? String((e as { code: unknown }).code) : '';
+      setSyncError(/radar_one_open_ride|duplicate key/.test(m) ? 'Ya tienes otra salida abierta (¿en otro dispositivo?). Ciérrala para sincronizar esta.' : /schema cache|does not exist/.test(m) ? 'Falta activar las tablas en Supabase.' : /Failed to fetch|NetworkError|Load failed|network/i.test(m) ? 'Sin conexión: tu recorrido se guarda en este teléfono y se enviará al volver la red.' : `No se pudo enviar al servidor${code ? ` (${code})` : ''}: ${m}`);
     } finally {
       syncing.current = false;
     }
@@ -281,6 +284,8 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             {s.status !== 'finished' && confirmEnd && <><button className="primary rec-big" onClick={doFinish}>Sí, finalizar</button><button className="ghost rec-big" onClick={() => setConfirmEnd(false)}>Seguir</button></>}
             {s.status === 'finished' && !done && <button className="ghost rec-big" onClick={() => void sync()}>Reintentar envío</button>}
             {done && <button className="primary rec-big" onClick={reset}>Nueva salida</button>}
+            {s.status === 'finished' && !done && !discard && <button className="ghost rec-big" onClick={() => setDiscard(true)}>Descartar y nueva salida</button>}
+            {s.status === 'finished' && !done && discard && <><button className="primary rec-big" onClick={() => { setDiscard(false); reset(); }}>Sí, descartar lo no enviado</button><button className="ghost rec-big" onClick={() => setDiscard(false)}>Cancelar</button></>}
           </div>
         </>
       )}
