@@ -15,6 +15,8 @@ test('La ubicación solo la ven quienes salen en la misma salida del grupo',asyn
   for(const f of ['20261123_independent_radar','20261124_alerts_and_stats','20261126_admin_groups_messages'])await db.exec(await readFile(new URL(`../supabase/migrations/${f}.sql`,import.meta.url),'utf8'));
   const mig=await readFile(new URL('../supabase/migrations/20261127_group_events_privacy.sql',import.meta.url),'utf8');
   await db.exec(mig);await db.exec(mig);
+  const trails=await readFile(new URL('../supabase/migrations/20261128_event_trails.sql',import.meta.url),'utf8');
+  await db.exec(trails);await db.exec(trails);
   await as(1);gid=(await q("select radar_create_group('Selfie Bike','Ana') id")).rows[0].id;
   const code=(await q('select invite_code from radar_groups')).rows[0].invite_code;
   for(const [n,name] of [[2,'Beto'],[3,'Cami'],[4,'Dani']]){await as(n);await q("select radar_join_group($1,$2)",[code,name]);}
@@ -44,16 +46,29 @@ test('La ubicación solo la ven quienes salen en la misma salida del grupo',asyn
   await as(4);await assert.rejects(q('insert into radar_rides(user_id,group_id,event_id) values($1,$2,$3)',[uid(4),gid,sat]),/row-level security/); // Dani no está en el sábado
   await assert.rejects(q('insert into radar_rides(user_id,group_id,event_id) values($1,$2,$3)',[uid(4),gid,sun]),/row-level security/); // el evento aún no abre
   // Ana (creadora, apuntada) y Beto salen en el sábado; Cami se apuntó pero no sale; Dani sale en privado
-  await ride(1,sat);await ride(2,sat);await ride(4,null);
+  const anaRide=await ride(1,sat);await ride(2,sat);await ride(4,null);
   assert.deepEqual(await live(1),['Ana','Beto']);
   assert.deepEqual(await live(2),['Ana','Beto']);
-  assert.deepEqual(await live(3),[]);            // apuntada pero sin salir: no ve a nadie (no es administradora)
+  assert.deepEqual(await live(3),['Ana','Beto']);   // apuntada que aún no sale (llega tarde): ve a quienes ya van
   assert.deepEqual(await live(4),[]);            // salida privada: no ve ni es vista
   assert.equal((await live(1)).includes('Dani'),false);
   // Cami sale en el sábado: ahora ve a Ana y Beto, y ellos la ven
   await ride(3,sat);
   assert.deepEqual(await live(3),['Ana','Beto','Cami']);
   assert.deepEqual(await live(2),['Ana','Beto','Cami']);
+  // Rastro: Ana avanza ~110 m por punto; quien llega tarde (Cami) ve por dónde pasaron, sin los primeros 250 m de casa
+  await as(1);
+  for(let k=1;k<=30;k++)await q("insert into radar_points(ride_id,user_id,latitude,longitude,accuracy_m,recorded_at) values($1,$2,$3,-74.0,5,now()+make_interval(secs=>$4))",[anaRide,uid(1),5.0+k*0.001,k]);
+  await as(3);
+  let tr=(await q('select * from radar_event_trails($1)',[sat])).rows;
+  assert.deepEqual([...new Set(tr.map(r=>r.display_name))],['Ana']);   // no incluye a Cami (ella misma), ni a Beto (aún sin 250 m), ni a Dani (privado)
+  assert.ok(tr.length>=25&&tr.length<=30,String(tr.length));
+  assert.ok(Math.min(...tr.map(r=>r.latitude))>5.0+0.00226,'se omiten los primeros 250 m');
+  await as(4);await assert.rejects(q('select * from radar_event_trails($1)',[sat]),/no disponible/);   // no apuntado
+  await as(3);await assert.rejects(q('select * from radar_event_trails($1)',[sun]),/no disponible/);   // aún no abierta
+  await as(1);await q("update radar_rides set status='paused' where id=$1",[anaRide]);
+  await as(3);assert.equal((await q('select * from radar_event_trails($1)',[sat])).rows.length,0);       // en pausa no se comparte rastro
+  await as(1);await q("update radar_rides set status='active' where id=$1",[anaRide]);
   // Beto se baja de la salida: deja de verse y de ver
   await as(2);await q('select radar_event_leave($1)',[sat]);
   assert.deepEqual(await live(1),['Ana','Cami']);

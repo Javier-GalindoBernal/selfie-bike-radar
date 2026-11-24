@@ -87,7 +87,7 @@ export default function GroupEvents({ client, groupId, userId, isManager }: { cl
         <h2>Salidas del grupo</h2>
         <button className="primary route-load" onClick={() => { if (!creating && !when) setWhen(toLocalInput(new Date(Date.now() + 24 * 3600 * 1000))); setCreating((v) => !v); }}>{creating ? 'Cerrar' : '＋ Nueva salida'}</button>
       </div>
-      <p className="map-caption">🔒 <b>Privacidad:</b> tu ubicación solo la ven quienes se apuntaron a <b>la misma salida</b> (misma ruta y día) y están saliendo en ella. Si sales por tu cuenta o en otra salida, nadie ve dónde estás.</p>
+      <p className="map-caption">🔒 <b>Privacidad:</b> tu ubicación y por dónde pasaste solo los ven quienes se apuntaron a <b>la misma salida</b> (misma ruta y día), mientras ella está abierta. Si te apuntas y sales tarde, verás por dónde pasaron los demás para alcanzarlos. No se muestran los primeros 250 m desde tu inicio (tu casa). Si sales por tu cuenta o en otra salida, nadie ve dónde estás.</p>
       {error && <p role="alert" className="alert">{error}</p>}
       {info && <p role="status" className="notice">{info}</p>}
 
