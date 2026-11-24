@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { fetchWithTimeout } from './client-config.ts';
 export type Group = {id:string; name:string; invite_code:string};
-export type Rider = {user_id:string;display_name:string;latitude:number;longitude:number;speed_mps:number|null;accuracy_m:number;recorded_at:string};
+export type Rider = {user_id:string;display_name:string;latitude:number;longitude:number;speed_mps:number|null;accuracy_m:number;recorded_at:string;event_id?:string|null;event_title?:string|null};
 export type Ride = {id:string;user_id:string;group_id:string;name:string;status:'active'|'paused'|'finished';started_at:string;ended_at:string|null;distance_m:number;duration_s:number};
 export function publicKeyValid(key:string) {
  if(key.startsWith('sb_publishable_')) return true;

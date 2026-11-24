@@ -6,6 +6,9 @@ import { fmtKm } from '@/lib/geo';
 import { IconPause, IconPlay, IconStop } from './Icons';
 import { progressOnRoute } from '@/lib/routes';
 import { roadRoute } from '@/lib/route';
+import { addRoute } from '@/lib/routeStore';
+import { buildRoute } from '@/lib/routes';
+import { toLatLngs, type GroupEvent } from './GroupEvents';
 import { rejoinPath, type Rejoin } from '@/lib/skills/routeCorrector';
 import { setActiveRoute, useRoutes } from '@/lib/routeStore';
 import { applySample, displaySpeedKmh, finish, newRecState, pause, resume, tick, toSegments, type RecState } from '@/lib/recording';
@@ -46,6 +49,8 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   const [openRide, setOpenRide] = useState<{ id: string; name: string } | null>(null);
   const [syncError, setSyncError] = useState('');
   const [rejoin, setRejoin] = useState<Rejoin | null>(null);
+  const [openEvents, setOpenEvents] = useState<GroupEvent[]>([]);
+  const [eventId, setEventId] = useState<string | null>(null); // null = aún sin elegir; '' = privada
   const [wake, setWake] = useState(true);
   const [clock, setClock] = useState(0);
   const lastSave = useRef(0);
@@ -79,7 +84,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
     try {
       let created = snap.rideCreated;
       if (!created) {
-        const { error: e } = await client.from('radar_rides').upsert({ id: snap.rideId, user_id: snap.userId, group_id: snap.groupId, name: snap.name, status: 'active', started_at: snap.startedAt }, { onConflict: 'id', ignoreDuplicates: true });
+        const { error: e } = await client.from('radar_rides').upsert({ id: snap.rideId, user_id: snap.userId, group_id: snap.groupId, name: snap.name, status: 'active', started_at: snap.startedAt, event_id: snap.eventId ?? null }, { onConflict: 'id', ignoreDuplicates: true });
         if (e) throw e;
         created = true;
       }
@@ -185,6 +190,20 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
     };
   }, [active]);
 
+  useEffect(() => {
+    if (!client || !groupId || s) return;
+    let alive = true;
+    const run = () => void client.rpc('radar_group_events', { gid: groupId }).then(({ data, error: e }) => {
+      if (!alive || e) return;
+      setOpenEvents(((data || []) as GroupEvent[]).filter((x) => x.joined && x.open_now && x.status === 'scheduled'));
+    });
+    run();
+    const t = setInterval(run, 60000);
+    return () => { alive = false; clearInterval(t); };
+  }, [client, groupId, s]);
+  const chosen = eventId === null ? (openEvents.length === 1 ? openEvents[0].id : '') : eventId;
+  const chosenEvent = openEvents.find((x) => x.id === chosen) ?? null;
+
   async function start() {
     if (!client || !groupId || busy) return;
     setBusy(true);
@@ -198,7 +217,21 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
         setError('Ya tienes una salida abierta (quizá en otro dispositivo). Ciérrala para empezar una nueva.');
         return;
       }
-      commit(newRecState({ rideId: crypto.randomUUID(), groupId, userId, name: name.trim().slice(0, 120) || 'Salida en bici', now: Date.now() }), true);
+      commit(newRecState({ rideId: crypto.randomUUID(), groupId, userId, name: (name.trim() || chosenEvent?.title || 'Salida en bici').slice(0, 120), now: Date.now(), eventId: chosenEvent?.id ?? null, eventTitle: chosenEvent?.title ?? null }), true);
+      if (chosenEvent?.route_id) {
+        // La ruta de la salida del grupo se activa sola para seguirla.
+        void client.rpc('radar_group_route_coords', { rid: chosenEvent.route_id }).then(({ data }) => {
+          const coords = toLatLngs(data);
+          if (coords.length < 2) return;
+          try {
+            const r = buildRoute({ name: chosenEvent.route_name || chosenEvent.title, coords, ele: coords.map(() => null), format: 'Grupo', warnings: [] }, `grupo-${chosenEvent.route_id}`, new Date());
+            addRoute({ ...r, distance_m: chosenEvent.route_distance_m || r.distance_m });
+            setActiveRoute(r.id);
+          } catch {
+            /* sin espacio: se sigue sin ruta */
+          }
+        });
+      }
       void sync();
     } catch (e) {
       setError(/schema cache|does not exist/.test(msg(e)) ? 'Falta activar las tablas en Supabase.' : msg(e));
@@ -282,8 +315,9 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
           <label htmlFor="rec-name">Nombre de la salida</label>
           <input id="rec-name" value={name} maxLength={120} onChange={e => setName(e.target.value)} />
           <button className="rec-go" disabled={busy} onClick={() => void start()} aria-label="Iniciar salida"><IconPlay size={44} /><span>INICIAR</span></button>
+          <div className="route-pick event-pick"><label htmlFor="rec-event">¿Con quién sales?</label><select id="rec-event" value={chosen} onChange={e => setEventId(e.target.value)}><option value="">🔒 Salida privada (nadie ve mi ubicación)</option>{openEvents.map(x => <option key={x.id} value={x.id}>👥 {x.title}</option>)}</select>{chosenEvent ? <p className="route-chip">👥 Solo verán tu ubicación quienes están apuntados a <b>{chosenEvent.title}</b> y salen en ella. {chosenEvent.route_name ? `La ruta «${chosenEvent.route_name}» se activará sola.` : ''}</p> : <p className="map-caption">{openEvents.length ? 'Elige la salida del grupo para que tus compañeros apuntados te vean.' : 'No tienes una salida del grupo abierta ahora. Apúntate a una en la pestaña «Rutas» (1 hora antes de que empiece ya se puede salir). Mientras tanto, tu salida es privada.'}</p>}</div>
           <div className="route-pick"><label htmlFor="rec-route">Ruta a seguir</label><select id="rec-route" value={route?.id ?? ''} onChange={e => setActiveRoute(e.target.value || null)}><option value="">Sin ruta (salida libre)</option>{routes.map(x => <option key={x.id} value={x.id}>{x.name} · {fmtKm(x.distance_m)}</option>)}</select>{route ? <p className="route-chip">⚑ Al iniciar verás <b>{route.name}</b> ({fmtKm(route.distance_m)}, +{Math.round(route.gain_m)} m) punteada en el mapa, con tu avance y aviso si te sales.</p> : <p className="map-caption">{routes.length ? 'Elige una ruta guardada para seguirla.' : 'Carga un GPX en la pestaña «Rutas» para seguirlo aquí.'}</p>}</div>
-          <p className="map-caption">Mientras la salida esté activa, tu grupo verá tu posición en el radar. Al pausar o finalizar dejas de compartirla. Mantén esta página abierta y la pantalla encendida: en iPhone y Android el navegador detiene el GPS si bloqueas el teléfono o cambias de app.</p>
+          <p className="map-caption">{chosenEvent ? 'Mientras la salida esté activa, solo los apuntados a esta salida que también estén saliendo verán tu posición. Al pausar o finalizar dejas de compartirla.' : 'Salida privada: nadie del grupo ve tu ubicación; solo se guarda para ti.'} Mantén esta página abierta y la pantalla encendida: en iPhone y Android el navegador detiene el GPS si bloqueas el teléfono o cambias de app.</p>
         </div>
       )}
       {s && (
@@ -294,7 +328,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             <div><span>Velocidad</span><strong>{cur.toFixed(1)} km/h</strong></div>
           </div>
           <p className="map-caption" role="status">
-            {s.status === 'active' ? (still ? '● Quieto: no suma distancia ni velocidad · sigues compartiendo con tu grupo' : '● Grabando y compartiendo con tu grupo') : s.status === 'paused' ? '❚❚ En pausa: no se comparte tu posición' : '■ Salida finalizada'}
+            {s.status === 'active' ? (still ? `● Quieto: no suma distancia ni velocidad${s.eventId ? ' · sigues visible para tu salida' : ''}` : s.eventId ? `● Grabando y compartiendo con quienes van a «${s.eventTitle ?? 'la salida'}»` : '● Grabando en privado: nadie ve tu ubicación') : s.status === 'paused' ? '❚❚ En pausa: no se comparte tu posición' : '■ Salida finalizada'}
             {last ? ` · precisión ±${Math.round(last.accuracy)} m` : s.status === 'active' ? ' · esperando la primera señal GPS…' : ''}
             {s.status === 'active' && !wake ? ' · no se pudo mantener la pantalla encendida: no la bloquees' : ''}
           </p>

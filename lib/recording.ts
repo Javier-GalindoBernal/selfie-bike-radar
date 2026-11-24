@@ -32,6 +32,8 @@ export type RecState = {
   speedMps?: number; // velocidad real filtrada
   movingMs?: number; // tiempo en movimiento
   lastSampleAt?: number;
+  eventId?: string | null; // salida del grupo a la que pertenece (null = salida privada)
+  eventTitle?: string | null;
   moveUntil?: number; // el movimiento real se mantiene 6 s tras confirmarse (evita parpadeos de velocidad)
 };
 
@@ -51,7 +53,7 @@ export type Sample = {
   at: number; // epoch ms
 };
 
-export function newRecState(a: { rideId: string; groupId: string; userId: string; name: string; now: number }): RecState {
+export function newRecState(a: { rideId: string; groupId: string; userId: string; name: string; now: number; eventId?: string | null; eventTitle?: string | null }): RecState {
   return {
     rideId: a.rideId,
     groupId: a.groupId,
@@ -67,6 +69,8 @@ export function newRecState(a: { rideId: string; groupId: string; userId: string
     points: [],
     syncedCount: 0,
     rideCreated: false,
+    eventId: a.eventId ?? null,
+    eventTitle: a.eventTitle ?? null,
     moving: false,
     speedMps: 0,
     movingMs: 0,

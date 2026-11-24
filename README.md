@@ -62,6 +62,12 @@ insert into public.radar_app_admins(user_id) select id from auth.users where low
 
 La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wikiloc, Garmin, Google Earth…), ver distancia y desnivel, guardarla y «seguirla»: el trazado se dibuja punteado en el mapa del radar y en el de «Grabar», con aviso si te desvías más de 60 m. Al cargar una ruta se valida (mínimo 200 m, sin coordenadas absurdas) y se avisa de saltos, rutas de ida o falta de altitud. En «Grabar» se elige la ruta a seguir antes de iniciar y durante la salida se muestra el avance y el desvío. Las rutas se guardan solo en el navegador del teléfono (hasta 30, simplificadas a ~2500 puntos) y no se comparten con el grupo. No se admite FIT.
 
+## Privacidad de la ubicación: salidas del grupo
+
+Ejecutar una vez `supabase/migrations/20261127_group_events_privacy.sql` (idempotente). Desde esa migración **el radar ya no muestra a todo el grupo**: la ubicación en vivo solo la ven quienes (1) se apuntaron a la **misma salida** del grupo (ruta + día/hora, creada en «Rutas → Salidas del grupo»), (2) están **saliendo en ella ahora** (o son administradores del grupo apuntados) y (3) dentro de su ventana de tiempo (1 h antes hasta el final). Una salida iniciada sin elegir salida del grupo es **privada**: nadie ve su posición. Cancelar la salida, bajarse de ella o pausar/finalizar oculta la ubicación al instante. El servidor lo exige (política RLS en `radar_rides.event_id` y función `radar_live_locations`, con pruebas en `tests/event-privacy.test.mjs`); el cliente no puede saltarse la regla. Los avisos de ayuda (pinchazo, avería, salud) siguen mostrando la posición al grupo porque el miembro los envía a propósito.
+
+**Rutas compartidas:** cada persona puede compartir una ruta de «Mis rutas» con el grupo («Compartir con el grupo»); las demás la guardan y la siguen, o el organizador la elige al crear una salida. Quien la compartió o un administrador puede quitarla.
+
 ## Cómo entra la gente al grupo
 
 Registrarse solo crea la cuenta; para entrar a «Selfie Bike» hace falta el **código de invitación** (o que un administrador de la app los agregue). Tras entrar sin grupo, la app muestra «Último paso: únete a tu grupo». En «Mi grupo» el botón **Copiar enlace de invitación** genera `https://selfie-bike-radar.vercel.app/?codigo=…`: quien lo abre, crea su cuenta y entra, se une solo (usa el nombre que escribió al registrarse). El enlace equivale al código: compártelo solo por privado y regenera el código si se filtra.

@@ -1,9 +1,12 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { fmtKm } from '@/lib/geo';
 import { MAX_FILE_BYTES, buildRoute, parseRoute, routeToGpx, type Parsed, type Route } from '@/lib/routes';
 import { addRoute, removeRoute, setActiveRoute, useRoutes } from '@/lib/routeStore';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { toLatLngs } from './GroupEvents';
+import { adminError } from './GroupAdmin';
 import { IconRoute } from './Icons';
 import { roadRoute } from '@/lib/route';
 import { findStraightRuns } from '@/lib/skills/noStraightLines';
@@ -12,7 +15,9 @@ import { fillStraightGaps } from '@/lib/skills/routeCorrector';
 const RouteBuilder = dynamic(() => import('./RouteBuilder'), { ssr: false, loading: () => <div className="map-loading">Cargando el editor…</div> });
 const MapView = dynamic(() => import('./Map'), { ssr: false, loading: () => <div className="map-loading">Cargando el mapa…</div> });
 
-export default function RoutesPanel() {
+type GroupRoute = { id: string; name: string; distance_m: number; gain_m: number; source: string; author: string; mine: boolean };
+
+export default function RoutesPanel({ client = null, groupId = '' }: { client?: SupabaseClient | null; groupId?: string }) {
   const { routes, activeId } = useRoutes();
   const input = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<{ parsed: Parsed; file: string; name: string; fixed?: [number, number][]; gain?: number } | null>(null);
@@ -22,6 +27,42 @@ export default function RoutesPanel() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [groupRoutes, setGroupRoutes] = useState<GroupRoute[]>([]);
+  const reloadGroup = useCallback(async () => {
+    if (!client || !groupId) return setGroupRoutes([]);
+    const { data, error: e } = await client.rpc('radar_group_routes', { gid: groupId });
+    if (!e) setGroupRoutes((data || []) as GroupRoute[]);
+  }, [client, groupId]);
+  useEffect(() => { void Promise.resolve().then(reloadGroup); }, [reloadGroup]);
+  async function share(r: Route) {
+    if (!client || !groupId) return;
+    const { error: e } = await client.rpc('radar_share_route', { gid: groupId, route_name: r.name, dist: r.distance_m, gain: r.gain_m, src: r.source, route_coords: r.coords });
+    if (e) return setError(adminError(e));
+    setError('');
+    setInfo(`Ruta «${r.name}» compartida con el grupo. Ya se puede elegir al crear una salida.`);
+    await reloadGroup();
+  }
+  async function adopt(g: GroupRoute) {
+    if (!client) return;
+    const { data, error: e } = await client.rpc('radar_group_route_coords', { rid: g.id });
+    if (e) return setError(adminError(e));
+    const coords = toLatLngs(data);
+    if (coords.length < 2) return setError('La ruta compartida no tiene un trazado válido.');
+    try {
+      const r: Route = { id: `grupo-${g.id}`, name: g.name, created: new Date().toISOString(), distance_m: g.distance_m, gain_m: g.gain_m, coords, source: 'Grupo' };
+      addRoute(r);
+      setActiveRoute(r.id);
+      setInfo(`Ruta «${g.name}» guardada en tus rutas y lista para seguir.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar la ruta.');
+    }
+  }
+  async function removeShared(g: GroupRoute) {
+    if (!client) return;
+    const { error: e } = await client.rpc('radar_delete_shared_route', { rid: g.id });
+    if (e) return setError(adminError(e));
+    await reloadGroup();
+  }
 
   async function pick(file: File) {
     setError('');
@@ -126,12 +167,31 @@ export default function RoutesPanel() {
               <div className="route-actions">
                 <button className="ghost" onClick={() => { setDraft(null); setPreview(r); }}>Ver</button>
                 <button className={r.id === activeId ? 'ghost on' : 'ghost'} onClick={() => setActiveRoute(r.id === activeId ? null : r.id)}>{r.id === activeId ? 'Dejar de seguir' : 'Seguir'}</button>
+                {client && groupId && !r.id.startsWith('grupo-') && <button className="ghost" onClick={() => void share(r)}>Compartir con el grupo</button>}
                 <button className="ghost" onClick={() => download(r)}>GPX</button>
                 <button className="ghost danger" onClick={() => { if (window.confirm(`¿Eliminar «${r.name}» de este teléfono?`)) removeRoute(r.id); }}>Eliminar</button>
               </div>
             </li>
           ))}
         </ul>
+      )}
+      {client && groupId && (
+        <>
+          <h3 className="sub-h">Rutas compartidas del grupo</h3>
+          {groupRoutes.length === 0 ? <p className="map-caption">Nadie ha compartido rutas todavía. Comparte una de «Mis rutas» con el botón «Compartir con el grupo».</p> : (
+            <ul className="route-list">
+              {groupRoutes.map((g) => (
+                <li key={g.id}>
+                  <div className="route-info"><strong>{g.name}</strong><span>{fmtKm(g.distance_m)} · +{Math.round(g.gain_m)} m · {g.source} · por {g.author}</span></div>
+                  <div className="route-actions">
+                    <button className="ghost" onClick={() => void adopt(g)}>Guardar y seguir</button>
+                    {g.mine && <button className="ghost danger" onClick={() => { if (window.confirm(`¿Quitar «${g.name}» de las rutas del grupo?`)) void removeShared(g); }}>Quitar</button>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );

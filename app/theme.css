@@ -120,3 +120,5 @@ body{background:var(--paper);color:var(--ink);font-family:ui-rounded,"SF Pro Rou
 .onboard{margin:0 0 18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,var(--tang-soft),#fff);border:2px solid var(--tang)}
 .onboard h2{margin:0 0 6px;color:var(--leaf-dark)}.onboard form{display:grid;gap:10px;margin-top:10px}
 .onboard label{display:grid;gap:4px;font-weight:700;color:var(--leaf-dark)}.onboard input{padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px}
+.sub-h{margin:20px 0 6px;color:var(--leaf-dark)}.events-panel{padding:0 18px 20px}
+.route-info span{display:block}
