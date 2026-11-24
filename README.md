@@ -62,6 +62,10 @@ insert into public.radar_app_admins(user_id) select id from auth.users where low
 
 La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wikiloc, Garmin, Google Earth…), ver distancia y desnivel, guardarla y «seguirla»: el trazado se dibuja punteado en el mapa del radar y en el de «Grabar», con aviso si te desvías más de 60 m. Al cargar una ruta se valida (mínimo 200 m, sin coordenadas absurdas) y se avisa de saltos, rutas de ida o falta de altitud. En «Grabar» se elige la ruta a seguir antes de iniciar y durante la salida se muestra el avance y el desvío. Las rutas se guardan solo en el navegador del teléfono (hasta 30, simplificadas a ~2500 puntos) y no se comparten con el grupo. No se admite FIT.
 
+## Cómo entra la gente al grupo
+
+Registrarse solo crea la cuenta; para entrar a «Selfie Bike» hace falta el **código de invitación** (o que un administrador de la app los agregue). Tras entrar sin grupo, la app muestra «Último paso: únete a tu grupo». En «Mi grupo» el botón **Copiar enlace de invitación** genera `https://selfie-bike-radar.vercel.app/?codigo=…`: quien lo abre, crea su cuenta y entra, se une solo (usa el nombre que escribió al registrarse). El enlace equivale al código: compártelo solo por privado y regenera el código si se filtra.
+
 ## Dibujar rutas y «skills» internas
 
 «Rutas → Dibujar ruta» funciona como el planificador de Strava: tocas el mapa para marcar puntos y cada tramo se traza por calles y ciclovías (perfil bicicleta de OpenStreetMap vía routing.openstreetmap.de); si un tramo no tiene camino se marca con ✕ y no se guarda en línea recta. Dos módulos internos aplican las reglas (`lib/skills/`):

@@ -116,3 +116,7 @@ body{background:var(--paper);color:var(--ink);font-family:ui-rounded,"SF Pro Rou
 .app-admin input,.app-admin select,.group-admin input:not([type=checkbox]),.group-admin textarea{padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;color:var(--ink)}
 .group-admin .ghost.danger{margin-top:8px}
 .group-admin .checkbox-row,.app-admin .checkbox-row{display:flex;flex-direction:row;align-items:center;gap:8px}
+
+.onboard{margin:0 0 18px;padding:18px;border-radius:20px;background:linear-gradient(135deg,var(--tang-soft),#fff);border:2px solid var(--tang)}
+.onboard h2{margin:0 0 6px;color:var(--leaf-dark)}.onboard form{display:grid;gap:10px;margin-top:10px}
+.onboard label{display:grid;gap:4px;font-weight:700;color:var(--leaf-dark)}.onboard input{padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px}
