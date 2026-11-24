@@ -40,6 +40,10 @@ Abrir http://localhost:3001. Compilación: `npm run build`; servidor de producci
 
 Sin clave pública configurada sigue disponible «Explorar una vista de ejemplo». El dashboard es para consultar, no para grabar con el navegador bloqueado. `/share` explica el nuevo flujo. Las API abiertas del prototipo y las rutas Strava devuelven HTTP 410; sus fuentes anteriores se conservan como texto en `legacy-strava/`.
 
+## Cuenta, logo y foto de perfil
+
+La primera pantalla pide **entrar o crear cuenta** (nombre, correo y contraseña); la conexión con Supabase viene incluida mediante `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (valores públicos) y solo queda una «Configuración avanzada» si el servidor no responde. La foto de perfil se sube tocando el círculo de la esquina superior; requiere ejecutar una vez `supabase/migrations/20261125_profile_avatars.sql` (bucket público `avatars`, cada persona solo escribe en su carpeta). Cualquiera que conozca el identificador de usuario puede ver su foto por URL.
+
 ## Grabar salidas desde la web
 
 La pestaña «● Grabar» registra una salida con el GPS del navegador: tiempo activo, distancia, velocidad, pausa/reanudar, mapa con el trazado y envío a tu cuenta (los compañeros te ven en el radar mientras estés activo). Si se corta la red, los puntos quedan en el teléfono y se envían al volver. **Limitación del navegador:** el GPS web se detiene si bloqueas la pantalla o cambias de app; la página pide mantener la pantalla encendida, pero no sustituye a la app nativa para salidas largas. Aún no se ha probado una salida real en un teléfono.
