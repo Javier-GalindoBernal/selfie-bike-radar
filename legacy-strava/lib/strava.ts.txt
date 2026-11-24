@@ -1,0 +1,81 @@
+import { store, type Member, type Activity } from "./store";
+
+const TOKEN_URL = "https://www.strava.com/oauth/token";
+
+export const baseUrl = () =>
+  process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
+
+export function authorizeUrl(memberId: string) {
+  const p = new URLSearchParams({
+    client_id: process.env.STRAVA_CLIENT_ID ?? "",
+    redirect_uri: `${baseUrl()}/api/strava/callback`,
+    response_type: "code",
+    approval_prompt: "auto",
+    scope: "read,activity:read",
+    state: memberId,
+  });
+  return `https://www.strava.com/oauth/authorize?${p}`;
+}
+
+async function tokenRequest(body: Record<string, string>) {
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.STRAVA_CLIENT_ID ?? "",
+      client_secret: process.env.STRAVA_CLIENT_SECRET ?? "",
+      ...body,
+    }),
+  });
+  if (!res.ok) throw new Error(`Strava token error ${res.status}`);
+  return res.json();
+}
+
+export async function exchangeCode(memberId: string, code: string) {
+  const t = await tokenRequest({ code, grant_type: "authorization_code" });
+  await store.updateMember(memberId, {
+    strava_athlete_id: t.athlete?.id ?? null,
+    access_token: t.access_token,
+    refresh_token: t.refresh_token,
+    expires_at: t.expires_at,
+  });
+}
+
+async function freshToken(m: Member) {
+  if (!m.access_token || !m.refresh_token) throw new Error("Sin Strava");
+  if ((m.expires_at ?? 0) > Date.now() / 1000 + 60) return m.access_token;
+  const t = await tokenRequest({
+    grant_type: "refresh_token",
+    refresh_token: m.refresh_token,
+  });
+  await store.updateMember(m.id, {
+    access_token: t.access_token,
+    refresh_token: t.refresh_token,
+    expires_at: t.expires_at,
+  });
+  return t.access_token as string;
+}
+
+/** Descarga los últimos 30 días de actividades de un miembro. */
+export async function syncMember(m: Member) {
+  const token = await freshToken(m);
+  const after = Math.floor(Date.now() / 1000) - 30 * 86400;
+  const res = await fetch(
+    `https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=100`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) throw new Error(`Strava API ${res.status}`);
+  const raw = (await res.json()) as Record<string, any>[];
+  const acts: Activity[] = raw.map((a) => ({
+    id: a.id,
+    member_id: m.id,
+    name: a.name,
+    type: a.sport_type ?? a.type,
+    distance: a.distance,
+    moving_time: a.moving_time,
+    total_elevation_gain: a.total_elevation_gain ?? 0,
+    start_date: a.start_date,
+  }));
+  await store.upsertActivities(acts);
+  return acts.length;
+}

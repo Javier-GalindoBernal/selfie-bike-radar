@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-local/
 /out/
 
 # production
@@ -39,3 +40,18 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Flutter build products and local public connection settings
+/mobile/.dart_tool/
+/mobile/build/
+/mobile/.flutter-plugins*
+/mobile/android/local.properties
+/mobile/ios/Flutter/ephemeral/
+/mobile/ios/Flutter/Generated.xcconfig
+/mobile/ios/Flutter/flutter_export_environment.sh
+/mobile/ios/Runner/GeneratedPluginRegistrant.*
+/mobile/ios/Pods/
+/mobile/ios/.symlinks/
+/mobile/*.iml
+/mobile/config.local.json
+/deliverables/

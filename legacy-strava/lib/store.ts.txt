@@ -1,0 +1,128 @@
+import { createClient } from "@supabase/supabase-js";
+
+export type Member = {
+  id: string;
+  name: string;
+  strava_athlete_id: number | null;
+  access_token: string | null;
+  refresh_token: string | null;
+  expires_at: number | null;
+  created_at: string;
+};
+export type Loc = {
+  member_id: string;
+  lat: number;
+  lng: number;
+  speed: number | null; // m/s
+  updated_at: string;
+};
+export type Activity = {
+  id: number;
+  member_id: string;
+  name: string;
+  type: string;
+  distance: number; // m
+  moving_time: number; // s
+  total_elevation_gain: number; // m
+  start_date: string;
+};
+
+export interface Store {
+  listMembers(): Promise<Member[]>;
+  getMember(id: string): Promise<Member | null>;
+  createMember(name: string): Promise<Member>;
+  updateMember(id: string, patch: Partial<Member>): Promise<void>;
+  setLocation(loc: Loc): Promise<void>;
+  listLocations(): Promise<Loc[]>;
+  upsertActivities(acts: Activity[]): Promise<void>;
+  listActivities(sinceISO: string): Promise<Activity[]>;
+}
+
+function supabaseStore(): Store {
+  const sb = createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } },
+  );
+  const ok = <T>(r: { data: T | null; error: { message: string } | null }) => {
+    if (r.error) throw new Error(r.error.message);
+    return r.data as T;
+  };
+  return {
+    async listMembers() {
+      return ok(await sb.from("members").select("*").order("created_at"));
+    },
+    async getMember(id) {
+      return ok(await sb.from("members").select("*").eq("id", id).maybeSingle());
+    },
+    async createMember(name) {
+      return ok(await sb.from("members").insert({ name }).select().single());
+    },
+    async updateMember(id, patch) {
+      ok(await sb.from("members").update(patch).eq("id", id));
+    },
+    async setLocation(loc) {
+      ok(await sb.from("locations").upsert(loc));
+    },
+    async listLocations() {
+      return ok(await sb.from("locations").select("*"));
+    },
+    async upsertActivities(acts) {
+      if (acts.length) ok(await sb.from("activities").upsert(acts));
+    },
+    async listActivities(since) {
+      return ok(await sb.from("activities").select("*").gte("start_date", since));
+    },
+  };
+}
+
+type Mem = {
+  members: Map<string, Member>;
+  locs: Map<string, Loc>;
+  acts: Map<number, Activity>;
+};
+
+function memoryStore(): Store {
+  const g = globalThis as unknown as { __mem?: Mem };
+  const m = (g.__mem ??= { members: new Map(), locs: new Map(), acts: new Map() });
+  return {
+    async listMembers() {
+      return [...m.members.values()];
+    },
+    async getMember(id) {
+      return m.members.get(id) ?? null;
+    },
+    async createMember(name) {
+      const mem: Member = {
+        id: crypto.randomUUID(),
+        name,
+        strava_athlete_id: null,
+        access_token: null,
+        refresh_token: null,
+        expires_at: null,
+        created_at: new Date().toISOString(),
+      };
+      m.members.set(mem.id, mem);
+      return mem;
+    },
+    async updateMember(id, patch) {
+      const cur = m.members.get(id);
+      if (cur) m.members.set(id, { ...cur, ...patch });
+    },
+    async setLocation(loc) {
+      m.locs.set(loc.member_id, loc);
+    },
+    async listLocations() {
+      return [...m.locs.values()];
+    },
+    async upsertActivities(acts) {
+      acts.forEach((a) => m.acts.set(a.id, a));
+    },
+    async listActivities(since) {
+      return [...m.acts.values()].filter((a) => a.start_date >= since);
+    },
+  };
+}
+
+export const demoMode = !process.env.SUPABASE_URL;
+export const store: Store = demoMode ? memoryStore() : supabaseStore();

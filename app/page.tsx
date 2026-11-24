@@ -1,69 +1,126 @@
-import Image from "next/image";
+'use client';
+import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import GroupSafety from '@/components/GroupSafety';
+import MemberPerformance from '@/components/MemberPerformance';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SupabaseClient, Session } from '@supabase/supabase-js';
+import { radarClient, type Group, type Rider, type Ride } from '@/lib/radar';
+import { fetchWithTimeout, savedConfig, type PublicConfig } from '@/lib/client-config';
+import { fmtAgo, fmtKm, fmtDur, haversine } from '@/lib/geo';
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+const MapView=dynamic(()=>import('@/components/Map'),{ssr:false,loading:()=> <div className="map-loading">Cargando el mapa…</div>});
+const DEMO_GROUP:Group={id:'demo',name:'Rodada de muestra',invite_code:'DEMO — sin miembros reales'};
+const DEMO_RIDERS:Rider[]=[{user_id:'a',display_name:'Ana · ejemplo',latitude:4.863,longitude:-74.052,speed_mps:6.2,accuracy_m:8,recorded_at:'2026-11-23T15:00:00Z'},{user_id:'b',display_name:'Carlos · ejemplo',latitude:4.878,longitude:-74.042,speed_mps:5.8,accuracy_m:11,recorded_at:'2026-11-23T15:00:00Z'},{user_id:'c',display_name:'Luisa · ejemplo',latitude:4.854,longitude:-74.071,speed_mps:0,accuracy_m:6,recorded_at:'2026-11-23T15:00:00Z'}];
+
+export default function Radar(){
+ const [client,setClient]=useState<SupabaseClient|null>(null),[session,setSession]=useState<Session|null>(null);
+ const [url,setUrl]=useState(''),[key,setKey]=useState(''),[ready,setReady]=useState(false),[demo,setDemo]=useState(false);
+ const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[signUp,setSignUp]=useState(false);
+ const [groups,setGroups]=useState<Group[]>([]),[gid,setGid]=useState(''),[riders,setRiders]=useState<Rider[]>([]),[rides,setRides]=useState<Ride[]>([]);
+ const [tab,setTab]=useState('radar'),[error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const [name,setName]=useState(''),[groupName,setGroupName]=useState(''),[code,setCode]=useState(''),[me,setMe]=useState<[number,number]|null>(null);
+ const [lastSync,setLastSync]=useState<Date|null>(null),[connected,setConnected]=useState(true);
+ const watch=useRef<number|null>(null);
+ const [now,setNow]=useState(0);
+ useEffect(()=>{const first=setTimeout(()=>setNow(Date.now()),0);const timer=setInterval(()=>setNow(Date.now()),10000);return()=>{clearTimeout(first);clearInterval(timer);};},[]);
+ useEffect(()=>{
+  let alive=true;
+  async function boot(){
+   let fallback:PublicConfig={url:'',key:''};
+   let warning='';
+   try {
+    const response=await fetchWithTimeout('/api/config',{cache:'no-store'},5000);
+    if(!response.ok)throw new Error('Configuración no disponible');
+    const data=await response.json();
+    fallback={url:typeof data.url==='string'?data.url:'',key:typeof data.key==='string'?data.key:''};
+   }catch{warning='No pudimos consultar la conexión del servidor. Puedes abrir el ejemplo o configurar la conexión aquí.';}
+   if(!alive)return;
+   let config=fallback;
+   try{const saved=savedConfig(window.localStorage,fallback);config=saved.config;warning=saved.warning||warning;}catch{warning='Tu navegador no permite guardar la conexión. Podrás usarla durante esta sesión.';}
+   setUrl(config.url);setKey(config.key);
+   if(config.url&&config.key)try{setClient(radarClient(config.url,config.key));}catch(e){warning=friendly(e);}
+   const preview=new URLSearchParams(window.location.search);
+   if(preview.get('demo')==='1'){setDemo(true);setGid('demo');const view=preview.get('vista');if(view&&['radar','history','performance','group'].includes(view))setTab(view);}
+   setError(warning);setReady(true);
+  }
+  void boot();
+  const online=()=>setConnected(navigator.onLine);online();window.addEventListener('online',online);window.addEventListener('offline',online);
+  return()=>{alive=false;window.removeEventListener('online',online);window.removeEventListener('offline',online);if(watch.current!==null)navigator.geolocation.clearWatch(watch.current);};
+ },[]);
+ useEffect(()=>{
+  if(!client)return;
+  client.auth.getSession().then(({data,error})=>{if(error)throw error;setSession(data.session);}).catch(e=>setError(friendly(e)));
+  const {data}=client.auth.onAuthStateChange((_event,s)=>{setSession(s);setGroups([]);setGid('');setRiders([]);setRides([]);});
+  return()=>data.subscription.unsubscribe();
+ },[client]);
+ const loadGroups=useCallback(async()=>{
+  if(!client||!session||demo)return;
+  const {data,error}=await client.from('radar_groups').select('id,name,invite_code').order('created_at');
+  if(error)throw error;
+  setGroups(data||[]);setGid(old=>old||(data?.[0]?.id??''));
+ },[client,session,demo]);
+ useEffect(()=>{Promise.resolve().then(loadGroups).catch(e=>setError(friendly(e)));},[loadGroups]);
+ const load=useCallback(async(isCurrent:()=>boolean)=>{
+  if(!client||!session||!gid||demo)return;
+  const [live,history]=await Promise.all([client.rpc('radar_live_locations',{gid}),client.from('radar_rides').select('*').eq('group_id',gid).order('started_at',{ascending:false}).limit(100)]);
+  if(!isCurrent())return;
+  if(live.error||history.error)throw live.error||history.error;
+  setRiders(live.data||[]);setRides(history.data||[]);setLastSync(new Date());
+ },[client,session,gid,demo]);
+ useEffect(()=>{
+  let active=true;
+  const refresh=()=>load(()=>active).catch(e=>{if(active){setError(friendly(e));setRiders([]);}});
+  refresh();const id=setInterval(refresh,10000);return()=>{active=false;clearInterval(id);};
+ },[load]);
+ async function action(fn:()=>Promise<void>){setBusy(true);setError('');setNotice('');try{await fn();}catch(e){setError(friendly(e));}finally{setBusy(false);}}
+ async function configure(){await action(async()=>{
+  const endpoint=url.trim().replace(/\/$/,'');const publicKey=key.trim();
+  const c=radarClient(endpoint,publicKey);
+  const response=await fetchWithTimeout(`${endpoint}/auth/v1/settings`,{headers:{apikey:publicKey}});
+  if(!response.ok)throw new Error('Supabase no aceptó la conexión. Revisa que la dirección y la clave pública sean del mismo proyecto.');
+  try{localStorage.setItem('radar-public-config',JSON.stringify({url:endpoint,key:publicKey}));}catch{setNotice('Conexión activa para esta sesión. El navegador no permitió guardarla.');}
+  setClient(c);
+ });}
+ async function auth(){if(!client)return;await action(async()=>{
+  const {error}=signUp?await client.auth.signUp({email,password}):await client.auth.signInWithPassword({email,password});if(error)throw error;
+  if(signUp)setNotice('Cuenta solicitada. Revisa tu correo para confirmarla y después inicia sesión.');
+ });}
+ async function groupAction(join:boolean){if(!client)return;await action(async()=>{
+  const {data,error}=await client.rpc(join?'radar_join_group':'radar_create_group',join?{code:code.trim(),member_name:name.trim()}:{group_name:groupName.trim(),member_name:name.trim()});if(error)throw error;
+  await loadGroups();setGid(data);setCode('');setGroupName('');setNotice(join?'Ya eres parte del grupo.':'Grupo creado. Comparte el código solo con tus compañeros.');
+ });}
+ function locate(){
+  if(!navigator.geolocation){setError('Este navegador no permite obtener tu ubicación.');return;}
+  if(watch.current!==null)return;
+  watch.current=navigator.geolocation.watchPosition(p=>setMe([p.coords.latitude,p.coords.longitude]),()=>{setError('No pudimos obtener tu ubicación. Revisa el permiso de ubicación del navegador.');watch.current=null;},{enableHighAccuracy:true,maximumAge:10000,timeout:20000});
+ }
+ async function exportRide(ride:Ride){if(!client)return;await action(async()=>{
+  const points:{latitude:number;longitude:number;recorded_at:string;segment:number;altitude_m:number|null}[]=[];
+  for(let offset=0;;offset+=1000){
+   const {data,error}=await client.from('radar_points').select('latitude,longitude,recorded_at,segment,altitude_m').eq('ride_id',ride.id).order('recorded_at').order('id').range(offset,offset+999);
+   if(error)throw error;points.push(...(data||[]));if(!data||data.length<1000)break;
+  }
+  if(!points.length)throw new Error('Esta salida todavía no tiene puntos sincronizados.');
+  let lastSegment=-1;
+  const track=points.map(p=>{const boundary=p.segment!==lastSegment?(lastSegment===-1?'<trkseg>':'</trkseg><trkseg>'):'';lastSegment=p.segment;return `${boundary}<trkpt lat="${Number(p.latitude)}" lon="${Number(p.longitude)}">${p.altitude_m===null?'':`<ele>${Number(p.altitude_m)}</ele>`}<time>${new Date(p.recorded_at).toISOString()}</time></trkpt>`;}).join('')+'</trkseg>';
+  const xml=`<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="Selfie Bike Radar" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>Salida en bici</name>${track}</trk></gpx>`;
+  const href=URL.createObjectURL(new Blob([xml],{type:'application/gpx+xml'}));const a=document.createElement('a');a.href=href;a.download=`salida-${ride.id}.gpx`;a.click();setTimeout(()=>URL.revokeObjectURL(href),1000);
+ });}
+ const activeGroups=demo?[DEMO_GROUP]:groups,activeRiders=demo?DEMO_RIDERS:riders.filter(r=>now-Date.parse(r.recorded_at)<120000),group=activeGroups.find(g=>g.id===gid)||activeGroups[0];
+ const finished=rides.filter(r=>r.status==='finished'),week=finished;
+ const pins=activeRiders.map(r=>({id:r.user_id,name:r.display_name,pos:[r.latitude,r.longitude] as [number,number],me:r.user_id===session?.user.id}));
+ if(me)pins.push({id:'observer',name:'Mi posición',pos:me,me:true});
+ const header=<header className="topbar"><Link className="brand" href="/"><span className="brand-icon">◎</span><span>SELFIE <b>BIKE RADAR</b><small>Tu grupo. Tu ruta.</small></span></Link><div className="account">{demo?<span className="badge">Vista de ejemplo</span>:session?<span>{session.user.email}</span>:<span className="privacy-label">Grupos privados · sin Strava</span>}{(demo||session)&&<button className="ghost" onClick={()=>{if(demo){setDemo(false);setGid('');}else void client?.auth.signOut();}}>Salir</button>}</div></header>;
+ if(!ready)return <main className="app-shell">{header}<p className="loading">Preparando tu radar…</p></main>;
+ if(!session&&!demo)return <main className="app-shell">{header}<div className="welcome"><section className="welcome-copy"><span className="eyebrow">HECHO PARA RODAR JUNTOS</span><h1>El grupo siempre<br/><em>a la vista.</em></h1><p>Un lugar para encontrar a tus compañeros, guardar tus salidas y seguir tu progreso. Con tus datos y a tu ritmo.</p><div className="feature-pills"><span>◎ Radar del grupo</span><span>⌁ GPS propio</span><span>↗ Historial de salidas</span></div><button className="text-button" onClick={()=>{setDemo(true);setGid('demo');setError('');}}>Explorar una vista de ejemplo</button><p className="subtle">La app móvil registrará las salidas en Android y iPhone. Desde aquí puedes consultar el radar y tus estadísticas.</p></section><section className="auth-card"><span className="eyebrow">BIENVENIDO AL GRUPO</span><h2>{!client?'Conecta tu radar':signUp?'Crea tu cuenta':'Vamos a rodar'}</h2>{error&&<p role="alert" className="alert">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}{!client?<form onSubmit={e=>{e.preventDefault();configure();}}><label>Dirección de tu proyecto<input type="url" required value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://tu-proyecto.supabase.co"/></label><label>Clave pública de Supabase<input required value={key} onChange={e=>setKey(e.target.value)} placeholder="sb_publishable_… o anon" autoComplete="off"/></label><p className="subtle">En Supabase → Settings → API Keys. Usa publishable o anon; la clave secreta no sirve en esta pantalla.</p><button className="primary" type="submit" disabled={busy}>{busy?'Comprobando conexión…':'Guardar conexión'}</button></form>:<form onSubmit={e=>{e.preventDefault();void auth();}}><label>Correo electrónico<input type="email" autoComplete="email" required value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@correo.com"/></label><label>Contraseña<input type="password" required minLength={8} autoComplete={signUp?'new-password':'current-password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Mínimo 8 caracteres"/></label><button className="primary" disabled={busy}>{busy?'Un momento…':signUp?'Crear cuenta':'Entrar al radar'}</button><button className="text-button" type="button" onClick={()=>setSignUp(!signUp)}>{signUp?'Ya tengo cuenta':'Soy nuevo, crear cuenta'}</button><button className="text-button muted" type="button" onClick={()=>{setClient(null);localStorage.removeItem('radar-public-config');}}>Cambiar conexión</button></form>}</section></div><footer>SELFIE BIKE RADAR <span>Hecha para compartir el camino.</span></footer></main>;
+ return <main className="app-shell">{header}<div className="dashboard-heading"><div><span className="eyebrow">TU CENTRO DE RODADAS</span><h1>Vamos juntos.</h1><p>Todo tu grupo, en un solo lugar.</p></div><div className="group-picker"><label htmlFor="group">Tu grupo</label><select id="group" value={gid} onChange={e=>{setGid(e.target.value);setRiders([]);setRides([]);}}>{!activeGroups.length&&<option value="">Crea o únete a un grupo</option>}{activeGroups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select></div></div>{demo&&<p className="demo-notice">Datos ficticios para explorar el diseño. No hay personas reales compartiendo ubicación.</p>}{!connected&&<p className="alert">Sin conexión. Las posiciones mostradas pueden estar desactualizadas.</p>}{error&&<p role="alert" className="alert">{error}</p>}{notice&&<p role="status" className="notice">{notice}</p>}<div className="stats-grid"><Metric title="En el radar" value={String(activeRiders.length)} suffix="compañeros"/><Metric title="Kilómetros recientes · grupo" value={demo?'345.6':(week.reduce((s,r)=>s+r.distance_m,0)/1000).toFixed(1)} suffix="historial reciente, hasta 100 salidas"/><Metric title="Tiempo activo reciente" value={demo?fmtDur(57300):fmtDur(week.reduce((s,r)=>s+r.duration_s,0))} suffix="historial reciente del grupo"/><Metric title="Salidas terminadas" value={demo?'10':String(finished.length)} suffix="últimas 100 del grupo"/></div><nav className="tabs" aria-label="Vistas del radar">{[['radar','◎ Radar en vivo'],['history','⌁ Salidas'],['performance','▥ Desempeño'],['group','♧ Mi grupo']].map(([id,label])=><button key={id} className={tab===id?'selected':''} onClick={()=>setTab(id)}>{label}</button>)}</nav>
+ {group&&<GroupSafety key={`safety-${group.id}-${demo}`} client={client} groupId={group.id} groupName={group.name} userId={session?.user.id||'demo-observer'} demo={demo} position={me}/>}
+ {tab==='performance'&&<MemberPerformance key={`stats-${gid}-${demo}`} client={client} groupId={gid} userId={session?.user.id||'demo-observer'} demo={demo}/>}
+ {tab==='radar'&&<div className="radar-grid"><section className="map-panel"><div className="panel-heading"><div><h2>{group?.name||'El camino empieza aquí'}</h2><span>{demo?'Mapa de ejemplo':lastSync?`Actualizado ${lastSync.toLocaleTimeString('es-CO')}`:'Esperando una salida'}</span></div><button className="ghost" onClick={locate}>Ubicarme</button></div><div className="radar-map"><MapView pins={pins}/></div><div className="map-caption">Solo posiciones de salidas activas, recibidas en los últimos 2 minutos. Distancias en línea recta.</div></section><aside className="rider-panel"><div className="panel-heading"><h2>En el camino</h2><span>{activeRiders.length} visibles</span></div>{activeRiders.length===0?<div className="empty"><span>◎</span><h3>El radar está tranquilo</h3><p>Cuando un compañero inicie una salida desde la app móvil, aparecerá aquí.</p>{!group&&<button className="primary" onClick={()=>setTab('group')}>Crear mi grupo</button>}</div>:activeRiders.map((r,i)=><article className="rider" key={r.user_id}><div className={`avatar avatar-${i%3}`}>{r.display_name.slice(0,1)}</div><div className="rider-info"><h3>{r.display_name}</h3><span>{demo?'Posición de ejemplo':fmtAgo(r.recorded_at)} · ±{Math.round(r.accuracy_m)} m</span><p>{r.speed_mps===null?'Velocidad no disponible':`${(r.speed_mps*3.6).toFixed(1)} km/h`}{me&&` · ${fmtKm(haversine(me,[r.latitude,r.longitude]))} de ti`}</p></div></article>)}<div className="rider-note"><b>Comparte solo al rodar.</b><p>Al pausar o terminar tu salida, tu posición deja de aparecer en el radar.</p></div></aside></div>}
+ {tab==='history'&&<section className="content-panel"><div className="panel-heading"><h2>Las últimas salidas del grupo</h2><span>El recorrido GPS es privado</span></div>{rides.length===0?<div className="empty"><h3>Aún no hay salidas registradas</h3><p>Las salidas de la app aparecerán aquí cuando se sincronicen.</p></div>:<div className="table-scroll"><table><thead><tr><th>Salida</th><th>Fecha</th><th>Distancia</th><th>Tiempo activo</th><th>Estado</th><th>Mi recorrido</th></tr></thead><tbody>{rides.map(r=><tr key={r.id}><td>{r.name}</td><td>{new Date(r.started_at).toLocaleDateString('es-CO')}</td><td>{fmtKm(r.distance_m)}</td><td>{fmtDur(r.duration_s)}</td><td>{r.status==='finished'?'Terminada':r.status==='paused'?'Pausada':'En curso'}</td><td>{r.user_id===session?.user.id&&<button className="ghost" disabled={busy} onClick={()=>void exportRide(r)}>Descargar GPX</button>}</td></tr>)}</tbody></table></div>}</section>}
+ {tab==='group'&&<section className="group-grid">{group&&<article className="content-panel"><span className="eyebrow">TU COMUNIDAD</span><h2>{group.name}</h2><p>Invita a tus compañeros con este código. Al unirse podrán ver las estadísticas del grupo y las posiciones durante las salidas activas.</p><code className="invite-code">{group.invite_code}</code><button className="ghost" disabled={demo} onClick={()=>void action(async()=>{await navigator.clipboard.writeText(group.invite_code);setNotice('Código copiado.');})}>Copiar código</button></article>}{!demo&&<article className="content-panel"><h2>Encuentra a tu grupo</h2><label>Tu nombre en el grupo<input required minLength={2} maxLength={60} value={name} onChange={e=>setName(e.target.value)} placeholder="Como te conocen tus compañeros"/></label><form onSubmit={e=>{e.preventDefault();void groupAction(false);}}><label>Crear un grupo<input required minLength={2} maxLength={80} value={groupName} onChange={e=>setGroupName(e.target.value)} placeholder="Nombre del grupo"/></label><button className="primary" disabled={busy||name.trim().length<2}>Crear grupo</button></form><div className="divider">o únete a uno existente</div><form onSubmit={e=>{e.preventDefault();void groupAction(true);}}><label>Código de invitación<input required value={code} onChange={e=>setCode(e.target.value)} placeholder="Pega el código del grupo"/></label><button className="ghost full" disabled={busy||name.trim().length<2}>Unirme al grupo</button></form></article>}</section>}
+ <footer>SELFIE BIKE RADAR <span>Tu ubicación, solo cuando tú decides.</span></footer></main>;
 }
+function Metric({title,value,suffix}:{title:string;value:string;suffix:string}){return <article className="metric"><span>{title}</span><strong>{value}</strong><small>{suffix}</small></article>;}
+function friendly(e:unknown):string{const message=typeof e==='object'&&e&&'message'in e?String(e.message):String(e);if(/schema cache|does not exist|Could not find/.test(message))return 'Falta activar las tablas de la app independiente. Ejecuta la nueva migración en el SQL Editor de Supabase.';if(/AbortError|aborted|Timeout|Failed to fetch|fetch failed|NetworkError/.test(message))return 'La conexión tardó demasiado o no hay internet. Puedes volver a intentarlo.';if(/Invalid login credentials/.test(message))return 'Correo o contraseña incorrectos.';return message;}

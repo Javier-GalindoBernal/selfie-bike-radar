@@ -1,0 +1,52 @@
+import { NextResponse } from "next/server";
+import { store, demoMode } from "@/lib/store";
+
+
+export async function GET() {
+  const since = new Date(Date.now() - 30 * 86400_000).toISOString();
+  const weekAgo = Date.now() - 7 * 86400_000;
+  const [members, locs, acts] = await Promise.all([
+    store.listMembers(),
+    store.listLocations(),
+    store.listActivities(since),
+  ]);
+
+  const data = members.map((m) => {
+    const mine = acts
+      .filter((a) => a.member_id === m.id)
+      .sort((a, b) => b.start_date.localeCompare(a.start_date));
+    const week = mine.filter((a) => new Date(a.start_date).getTime() >= weekAgo);
+    const sum = (xs: typeof mine, k: "distance" | "moving_time" | "total_elevation_gain") =>
+      xs.reduce((s, a) => s + (a[k] ?? 0), 0);
+    const monthDist = sum(mine, "distance");
+    const monthTime = sum(mine, "moving_time");
+    return {
+      id: m.id,
+      name: m.name,
+      stravaConnected: !!m.access_token,
+      location: locs.find((l) => l.member_id === m.id) ?? null,
+      stats: {
+        weekDistance: sum(week, "distance"),
+        weekTime: sum(week, "moving_time"),
+        weekElevation: sum(week, "total_elevation_gain"),
+        weekCount: week.length,
+        monthDistance: monthDist,
+        monthCount: mine.length,
+        avgSpeed: monthTime > 0 ? monthDist / monthTime : null, // m/s
+        last: mine[0]
+          ? { name: mine[0].name, type: mine[0].type, distance: mine[0].distance, date: mine[0].start_date }
+          : null,
+      },
+    };
+  });
+  return NextResponse.json({ demoMode, members: data });
+}
+
+export async function POST(req: Request) {
+  const { name } = await req.json();
+  if (typeof name !== "string" || !name.trim()) {
+    return NextResponse.json({ error: "Nombre requerido" }, { status: 400 });
+  }
+  const m = await store.createMember(name.trim().slice(0, 40));
+  return NextResponse.json({ id: m.id, name: m.name });
+}

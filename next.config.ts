@@ -1,17 +1,11 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 
-const nextConfig: NextConfig = {
-  /* config options here */
+const nextConfig = (phase: string): NextConfig => ({
+  // La vista local no comparte archivos con las compilaciones de producción.
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-local" : ".next",
   cacheComponents: true,
   partialPrefetching: true,
-  turbopack: {
-    rules: {
-      "*.css": {
-        loaders: ["@tailwindcss/turbopack"],
-        as: "*.css",
-      },
-    },
-  },
-};
+});
 
 export default nextConfig;

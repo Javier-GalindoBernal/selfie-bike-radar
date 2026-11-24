@@ -1,0 +1,12 @@
+import { NextResponse } from "next/server";
+import { store } from "@/lib/store";
+import { syncMember } from "@/lib/strava";
+
+export async function POST() {
+  const members = (await store.listMembers()).filter((m) => m.access_token);
+  const results = await Promise.allSettled(members.map(syncMember));
+  return NextResponse.json({
+    synced: results.filter((r) => r.status === "fulfilled").length,
+    failed: results.filter((r) => r.status === "rejected").length,
+  });
+}
