@@ -5,6 +5,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { fmtKm } from '@/lib/geo';
 import { IconPause, IconPlay, IconStop } from './Icons';
 import { progressOnRoute } from '@/lib/routes';
+import { roadRoute } from '@/lib/route';
+import { rejoinPath, type Rejoin } from '@/lib/skills/routeCorrector';
 import { setActiveRoute, useRoutes } from '@/lib/routeStore';
 import { applySample, finish, newRecState, pause, resume, tick, toSegments, type RecState } from '@/lib/recording';
 
@@ -43,6 +45,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   const [discard, setDiscard] = useState(false);
   const [openRide, setOpenRide] = useState<{ id: string; name: string } | null>(null);
   const [syncError, setSyncError] = useState('');
+  const [rejoin, setRejoin] = useState<Rejoin | null>(null);
   const [wake, setWake] = useState(true);
   const [clock, setClock] = useState(0);
   const lastSave = useRef(0);
@@ -249,8 +252,22 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
   const pending = s ? s.points.length - s.syncedCount : 0;
   const done = s?.status === 'finished' && s.rideCreated && pending === 0 && !syncError;
   const prog = route && last ? progressOnRoute([last.lat, last.lng], route.coords) : null;
+  const offKey = prog && prog.off_m > 60 && last ? `${last.lat.toFixed(3)},${last.lng.toFixed(3)}` : '';
+  const lastPos = last ? ([last.lat, last.lng] as [number, number]) : null;
   const avg = s && s.activeMs > 0 ? (s.distance / (s.activeMs / 1000)) * 3.6 : 0;
   const cur = last && last.speed !== null ? last.speed * 3.6 : avg;
+
+  useEffect(() => {
+    if (!offKey || !route || !lastPos) {
+      Promise.resolve().then(() => setRejoin(null));
+      return;
+    }
+    const ctl = new AbortController();
+    void rejoinPath(lastPos, route.coords, roadRoute, ctl.signal).then((r) => { if (!ctl.signal.aborted) setRejoin(r); });
+    return () => ctl.abort();
+    // se recalcula al moverse ~100 m fuera de la ruta
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offKey, route?.id]);
 
   if (demo) return <section className="content-panel"><div className="panel-heading"><h2>Grabar salida</h2></div><div className="empty"><h3>Inicia sesión para grabar</h3><p>La vista de ejemplo no registra ubicaciones.</p></div></section>;
   if (!groupId) return <section className="content-panel"><div className="panel-heading"><h2>Grabar salida</h2></div><div className="empty"><h3>Primero crea o únete a un grupo</h3></div></section>;
@@ -282,7 +299,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             {s.status === 'active' && !wake ? ' · no se pudo mantener la pantalla encendida: no la bloquees' : ''}
           </p>
           {route && s.status !== 'finished' && !prog && <p className="route-chip" role="status">⚑ Siguiendo «{route.name}» · {fmtKm(route.distance_m)}. Ve al inicio (▶ verde en el mapa) cuando tengas señal GPS.</p>}
-          {route && s.status !== 'finished' && prog && <p className={prog.off_m > 60 ? 'route-chip off' : 'route-chip'} role="status">{prog.off_m > 60 ? `⚠ Fuera de ruta · a ${fmtKm(prog.off_m)} del trazado` : `✓ En la ruta · avance ${fmtKm(prog.along_m)} de ${fmtKm(prog.total_m)} · faltan ${fmtKm(Math.max(prog.total_m - prog.along_m, 0))}`}</p>}
+          {route && s.status !== 'finished' && prog && <p className={prog.off_m > 60 ? 'route-chip off' : 'route-chip'} role="status">{prog.off_m > 60 ? `⚠ Fuera de ruta · a ${fmtKm(prog.off_m)} del trazado. ${rejoin?.path ? `Para volver: ${fmtKm(rejoin.path.distance_m)} por calles (línea azul).` : 'Calculando el camino de regreso…'}` : `✓ En la ruta · avance ${fmtKm(prog.along_m)} de ${fmtKm(prog.total_m)} · faltan ${fmtKm(Math.max(prog.total_m - prog.along_m, 0))}`}</p>}
           <div className="rec-actions">
             {s.status === 'active' && <button className="rec-btn pause" onClick={doPause}><IconPause size={22} /> Pausar</button>}
             {s.status === 'paused' && <button className="rec-btn go" onClick={doResume}><IconPlay size={22} /> Reanudar</button>}
@@ -293,7 +310,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             {s.status === 'finished' && !done && !discard && <button className="ghost rec-big" onClick={() => setDiscard(true)}>Descartar y nueva salida</button>}
             {s.status === 'finished' && !done && discard && <><button className="primary rec-big" onClick={() => { setDiscard(false); reset(); }}>Sí, descartar lo no enviado</button><button className="ghost rec-big" onClick={() => setDiscard(false)}>Cancelar</button></>}
           </div>
-          <div className="radar-map"><MapView pins={last ? [{ id: 'rec-me', name: 'Yo', pos: [last.lat, last.lng], me: true }] : []} track={segments} planned={route?.coords} follow /></div>
+          <div className="radar-map"><MapView pins={last ? [{ id: 'rec-me', name: 'Yo', pos: [last.lat, last.lng], me: true }] : []} track={segments} planned={route?.coords} routes={rejoin?.path && offKey ? [{ id: 'rejoin', coords: rejoin.path.coords, color: '#1a73e8' }] : []} follow /></div>
           <p className="map-caption">{done ? 'Salida guardada en tu cuenta. Puedes verla en la pestaña «Salidas».' : syncError ? syncError : pending > 0 ? `${pending} puntos por enviar` : 'Sincronizado con tu cuenta'}</p>
         </>
       )}

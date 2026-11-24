@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-
 import L from "leaflet";
 
 export type Pin = { id: string; name: string; pos: [number, number]; me?: boolean };
-export type Line = { id: string; coords: [number, number][] };
+export type Line = { id: string; coords: [number, number][]; color?: string };
 
 const icon = (label: string, me?: boolean, color?: string) =>
   L.divIcon({
@@ -79,7 +79,7 @@ export default function Map({
         <Polyline key={`s${t.id}`} positions={t.coords} pathOptions={{ color: "#FF8A1F", weight: 4, opacity: 0.8 }} />
       ))}
       {routes.map((r) => (
-        <Polyline key={`r${r.id}`} positions={r.coords} pathOptions={{ color: "#2B7A33", weight: 5, opacity: 0.85 }} />
+        <Polyline key={`r${r.id}`} positions={r.coords} pathOptions={{ color: r.color ?? "#2B7A33", weight: 5, opacity: 0.85 }} />
       ))}
       {pins.map((p) => (
         <Marker key={p.id} position={p.pos} icon={icon(p.me ? "Yo" : p.name.slice(0, 1).toUpperCase().replace(/[&<>"']/g, ""), p.me)}>

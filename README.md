@@ -48,6 +48,13 @@ La primera pantalla pide **entrar o crear cuenta** (nombre, correo y contraseña
 
 La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wikiloc, Garmin, Google Earth…), ver distancia y desnivel, guardarla y «seguirla»: el trazado se dibuja punteado en el mapa del radar y en el de «Grabar», con aviso si te desvías más de 60 m. Al cargar una ruta se valida (mínimo 200 m, sin coordenadas absurdas) y se avisa de saltos, rutas de ida o falta de altitud. En «Grabar» se elige la ruta a seguir antes de iniciar y durante la salida se muestra el avance y el desvío. Las rutas se guardan solo en el navegador del teléfono (hasta 30, simplificadas a ~2500 puntos) y no se comparten con el grupo. No se admite FIT.
 
+## Dibujar rutas y «skills» internas
+
+«Rutas → Dibujar ruta» funciona como el planificador de Strava: tocas el mapa para marcar puntos y cada tramo se traza por calles y ciclovías (perfil bicicleta de OpenStreetMap vía routing.openstreetmap.de); si un tramo no tiene camino se marca con ✕ y no se guarda en línea recta. Dos módulos internos aplican las reglas (`lib/skills/`):
+
+- **Sin líneas rectas** (`noStraightLines.ts`): detecta saltos de más de 400 m entre puntos, corta el trazo en vez de unirlo en recta (también al grabar con huecos de señal) y valida que una ruta construida no tenga tramos sin camino.
+- **Corrector de ruta** (`routeCorrector.ts`): «Corregir por calles» rellena los saltos de un archivo importado con el camino real; y si te desvías más de 60 m de la ruta que sigues, calcula y dibuja (línea azul) el camino por calles para volver a ella.
+
 ## Grabar salidas desde la web
 
 La pestaña «● Grabar» registra una salida con el GPS del navegador: tiempo activo, distancia, velocidad, pausa/reanudar, mapa con el trazado y envío a tu cuenta (los compañeros te ven en el radar mientras estés activo). Si se corta la red, los puntos quedan en el teléfono y se envían al volver. **Limitación del navegador:** el GPS web se detiene si bloqueas la pantalla o cambias de app; la página pide mantener la pantalla encendida, pero no sustituye a la app nativa para salidas largas. Aún no se ha probado una salida real en un teléfono.

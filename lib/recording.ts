@@ -1,4 +1,5 @@
 import { haversine } from "./geo.ts";
+import { MAX_STEP_M } from "./skills/noStraightLines.ts";
 
 export type RecPoint = {
   id: string;
@@ -9,6 +10,7 @@ export type RecPoint = {
   speed: number | null;
   altitude: number | null;
   at: string; // ISO
+  brk?: boolean; // hueco de señal: no unir con el punto anterior al dibujar
 };
 
 export type RecState = {
@@ -64,6 +66,7 @@ export function applySample(s: RecState, x: Sample, id: string, now = Date.now()
   if (x.at < Date.parse(s.startedAt) || x.at > now + 4 * 60_000) return s;
   const prev = s.points[s.points.length - 1];
   let add = 0;
+  let brk = false;
   if (prev) {
     const prevAt = Date.parse(prev.at);
     if (x.at <= prevAt) return s;
@@ -73,6 +76,7 @@ export function applySample(s: RecState, x: Sample, id: string, now = Date.now()
       if (d / dt > 50) return s; // salto imposible de GPS
       if (d < 4 && dt < 15) return s; // quieto: no saturar
       if (d >= 4) add = d;
+      if (d > MAX_STEP_M) brk = true; // sin señal: se corta el trazo en vez de dibujar una recta
     }
   }
   const speed = x.speed !== null && Number.isFinite(x.speed) && x.speed >= 0 && x.speed <= 50 ? x.speed : null;
@@ -86,6 +90,7 @@ export function applySample(s: RecState, x: Sample, id: string, now = Date.now()
     speed,
     altitude,
     at: new Date(x.at).toISOString(),
+    ...(brk ? { brk: true } : {}),
   };
   return { ...s, distance: s.distance + add, points: [...s.points, point] };
 }
@@ -119,7 +124,7 @@ export function toSegments(points: RecPoint[]): [number, number][][] {
   const out: [number, number][][] = [];
   let seg = -1;
   for (const p of points) {
-    if (p.segment !== seg) {
+    if (p.segment !== seg || p.brk) {
       out.push([]);
       seg = p.segment;
     }

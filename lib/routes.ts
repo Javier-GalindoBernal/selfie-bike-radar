@@ -1,4 +1,5 @@
 import { haversine } from "./geo.ts";
+import { findStraightRuns, MAX_STEP_M } from "./skills/noStraightLines.ts";
 
 export type LatLng = [number, number];
 export type Route = { id: string; name: string; created: string; distance_m: number; gain_m: number; coords: LatLng[]; source: string };
@@ -142,6 +143,8 @@ export function validateRoute(coords: LatLng[], ele: (number | null)[]): string[
   let jumps = 0;
   for (let i = 1; i < coords.length; i++) if (haversine(coords[i - 1], coords[i]) > 5000) jumps++;
   if (jumps) warnings.push(`El trazado tiene ${jumps} salto${jumps > 1 ? "s" : ""} de más de 5 km entre puntos: puede estar incompleto o unir tramos separados.`);
+  const straight = findStraightRuns(coords).length;
+  if (straight) warnings.push(`El trazado tiene ${straight} tramo${straight > 1 ? "s" : ""} recto${straight > 1 ? "s" : ""} (más de ${MAX_STEP_M} m sin puntos intermedios): pulsa «Corregir por calles» para que siga las vías.`);
   const first = coords[0], last = coords[coords.length - 1];
   if (haversine(first, last) > 0.7 * distance_m) warnings.push("Es una ruta de ida (el inicio y la meta están lejos).");
   if (!ele.some((e) => e !== null)) warnings.push("El archivo no trae altitud: no se puede calcular el desnivel.");

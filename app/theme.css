@@ -92,3 +92,10 @@ body{background:var(--paper);color:var(--ink);font-family:ui-rounded,"SF Pro Rou
 .route-pick select{padding:13px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;color:var(--ink)}
 .route-warn{margin:0;padding:8px 12px;border-radius:10px;background:#fff6dd;color:#7a5200;font-size:13px}
 .site-credit{margin-top:auto;padding:18px 16px 22px;text-align:center;font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--muted);border-top:1px solid var(--line)}
+
+.route-buttons{display:flex;gap:8px;flex-wrap:wrap}
+.builder-map{height:460px;margin:8px 0;touch-action:none}
+.builder-tools{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.route-label{display:block;margin-top:10px;font-weight:700;color:var(--leaf-dark)}
+.route-input{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;margin:6px 0}
+.rec-btn:disabled{opacity:.45}
