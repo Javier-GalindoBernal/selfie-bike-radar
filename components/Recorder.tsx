@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { fmtKm } from '@/lib/geo';
+import { IconPause, IconPlay, IconStop } from './Icons';
 import { applySample, finish, newRecState, pause, resume, tick, toSegments, type RecState } from '@/lib/recording';
 
 const MapView = dynamic(() => import('./Map'), { ssr: false, loading: () => <div className="map-loading">Cargando el mapa…</div> });
@@ -259,7 +260,7 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
         <div className="rec-start">
           <label htmlFor="rec-name">Nombre de la salida</label>
           <input id="rec-name" value={name} maxLength={120} onChange={e => setName(e.target.value)} />
-          <button className="primary rec-big" disabled={busy} onClick={() => void start()}>● Iniciar salida</button>
+          <button className="rec-go" disabled={busy} onClick={() => void start()} aria-label="Iniciar salida"><IconPlay size={44} /><span>INICIAR</span></button>
           <p className="map-caption">Mientras la salida esté activa, tu grupo verá tu posición en el radar. Al pausar o finalizar dejas de compartirla. Mantén esta página abierta y la pantalla encendida: en iPhone y Android el navegador detiene el GPS si bloqueas el teléfono o cambias de app.</p>
         </div>
       )}
@@ -275,18 +276,18 @@ export default function Recorder({ client, userId, groupId, groupName, demo }: {
             {last ? ` · precisión ±${Math.round(last.accuracy)} m` : s.status === 'active' ? ' · esperando la primera señal GPS…' : ''}
             {s.status === 'active' && !wake ? ' · no se pudo mantener la pantalla encendida: no la bloquees' : ''}
           </p>
-          <div className="radar-map"><MapView pins={last ? [{ id: 'rec-me', name: 'Yo', pos: [last.lat, last.lng], me: true }] : []} track={segments} follow /></div>
-          <p className="map-caption">{done ? 'Salida guardada en tu cuenta. Puedes verla en la pestaña «Salidas».' : syncError ? syncError : pending > 0 ? `${pending} puntos por enviar` : 'Sincronizado con tu cuenta'}</p>
           <div className="rec-actions">
-            {s.status === 'active' && <button className="ghost rec-big" onClick={doPause}>❚❚ Pausar</button>}
-            {s.status === 'paused' && <button className="primary rec-big" onClick={doResume}>▶ Reanudar</button>}
-            {s.status !== 'finished' && !confirmEnd && <button className="ghost rec-big" onClick={() => setConfirmEnd(true)}>■ Finalizar</button>}
-            {s.status !== 'finished' && confirmEnd && <><button className="primary rec-big" onClick={doFinish}>Sí, finalizar</button><button className="ghost rec-big" onClick={() => setConfirmEnd(false)}>Seguir</button></>}
+            {s.status === 'active' && <button className="rec-btn pause" onClick={doPause}><IconPause size={22} /> Pausar</button>}
+            {s.status === 'paused' && <button className="rec-btn go" onClick={doResume}><IconPlay size={22} /> Reanudar</button>}
+            {s.status !== 'finished' && !confirmEnd && <button className="rec-btn stop" onClick={() => setConfirmEnd(true)}><IconStop size={22} /> Finalizar</button>}
+            {s.status !== 'finished' && confirmEnd && <><button className="rec-btn go" onClick={doFinish}>Sí, guardar y finalizar</button><button className="ghost rec-big" onClick={() => setConfirmEnd(false)}>Seguir</button></>}
             {s.status === 'finished' && !done && <button className="ghost rec-big" onClick={() => void sync()}>Reintentar envío</button>}
-            {done && <button className="primary rec-big" onClick={reset}>Nueva salida</button>}
+            {done && <button className="rec-btn go" onClick={reset}><IconPlay size={22} /> Nueva salida</button>}
             {s.status === 'finished' && !done && !discard && <button className="ghost rec-big" onClick={() => setDiscard(true)}>Descartar y nueva salida</button>}
             {s.status === 'finished' && !done && discard && <><button className="primary rec-big" onClick={() => { setDiscard(false); reset(); }}>Sí, descartar lo no enviado</button><button className="ghost rec-big" onClick={() => setDiscard(false)}>Cancelar</button></>}
           </div>
+          <div className="radar-map"><MapView pins={last ? [{ id: 'rec-me', name: 'Yo', pos: [last.lat, last.lng], me: true }] : []} track={segments} follow /></div>
+          <p className="map-caption">{done ? 'Salida guardada en tu cuenta. Puedes verla en la pestaña «Salidas».' : syncError ? syncError : pending > 0 ? `${pending} puntos por enviar` : 'Sincronizado con tu cuenta'}</p>
         </>
       )}
     </section>

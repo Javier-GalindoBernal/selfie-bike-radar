@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "leaflet/dist/leaflet.css";
 import "./globals.css";
+import "./theme.css";
 
 export const metadata: Metadata = {
   title: "Selfie Bike Radar",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#163c36",
+  themeColor: "#2B7A33",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
