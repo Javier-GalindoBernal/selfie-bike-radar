@@ -44,6 +44,20 @@ Sin clave pública configurada sigue disponible «Explorar una vista de ejemplo�
 
 La primera pantalla pide **entrar o crear cuenta** (nombre, correo y contraseña); la conexión con Supabase viene incluida mediante `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` (valores públicos) y solo queda una «Configuración avanzada» si el servidor no responde. La foto de perfil se sube tocando el círculo de la esquina superior; requiere ejecutar una vez `supabase/migrations/20261125_profile_avatars.sql` (bucket público `avatars`, cada persona solo escribe en su carpeta). Cualquiera que conozca el identificador de usuario puede ver su foto por URL.
 
+## Administración, grupos y mensajes
+
+Ejecutar una vez `supabase/migrations/20261126_admin_groups_messages.sql` (idempotente). Después, para ser **administrador de la app**, ejecutar aparte en el SQL Editor (sustituyendo el correo; no lo subas al repositorio):
+
+```sql
+insert into public.radar_app_admins(user_id) select id from auth.users where lower(email)=lower('TU_CORREO') on conflict do nothing;
+```
+
+- **Grupos:** cualquiera puede crear varios grupos de ciclismo y unirse a otros con su código. El creador es `owner`; puede nombrar administradores de grupo, renombrar, **regenerar el código de invitación**, transferir la propiedad o eliminar el grupo.
+- **Mensajes para todo el grupo:** los administradores del grupo publican avisos (con opción de fijarlos); todos los integrantes los ven en el radar y en «Mi grupo».
+- **Integrantes:** los administradores ven correos, renombran y sacan personas; cualquiera puede salir de un grupo (menos el creador).
+- **Administrador de la app:** panel con todos los usuarios y grupos; puede crear usuarios (cliente aparte, sin cerrar su sesión), enviar enlaces de contraseña, eliminar cuentas y eliminar grupos. Todo se valida en el servidor (funciones `security definer` con comprobación de rol; hay pruebas en `tests/admin-groups.test.mjs`). No hace falta la clave `service_role`.
+- **Recuperar contraseña:** «¿Olvidaste tu contraseña?» envía un enlace; al abrirlo la app pide la contraseña nueva. En Supabase → Authentication → URL Configuration, añade `https://selfie-bike-radar.vercel.app` como Site URL y `https://selfie-bike-radar.vercel.app/**` en Redirect URLs. El correo integrado de Supabase tiene un límite bajo de envíos por hora; para un grupo grande configura un SMTP propio.
+
 ## Cargar rutas (GPX, TCX, KML, GeoJSON)
 
 La pestaña «Rutas» permite cargar un archivo de ruta (de Strava, Komoot, Wikiloc, Garmin, Google Earth…), ver distancia y desnivel, guardarla y «seguirla»: el trazado se dibuja punteado en el mapa del radar y en el de «Grabar», con aviso si te desvías más de 60 m. Al cargar una ruta se valida (mínimo 200 m, sin coordenadas absurdas) y se avisa de saltos, rutas de ida o falta de altitud. En «Grabar» se elige la ruta a seguir antes de iniciar y durante la salida se muestra el avance y el desvío. Las rutas se guardan solo en el navegador del teléfono (hasta 30, simplificadas a ~2500 puntos) y no se comparten con el grupo. No se admite FIT.

@@ -99,3 +99,20 @@ body{background:var(--paper);color:var(--ink);font-family:ui-rounded,"SF Pro Rou
 .route-label{display:block;margin-top:10px;font-weight:700;color:var(--leaf-dark)}
 .route-input{width:100%;padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;margin:6px 0}
 .rec-btn:disabled{opacity:.45}
+
+/* administración, mensajes, miembros */
+.group-grid{display:grid;gap:18px}.group-admin{display:grid;gap:18px}
+.msg-banner{margin:0 0 16px;padding:12px 16px;border-radius:16px;background:var(--tang-soft);border:1.5px solid #ffd2a1;color:var(--ink)}
+.msg-banner p{margin:4px 0;font-size:15px}.msg-banner small{color:var(--muted);margin-left:6px}
+.msg-list,.member-list{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:10px}
+.msg-list li{padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;background:#fff}.msg-list li.pinned{border-color:var(--tang);background:var(--tang-soft)}
+.msg-list p{margin:6px 0;white-space:pre-wrap}.msg-list small{color:var(--muted)}
+.member-list li{display:flex;flex-wrap:wrap;align-items:center;gap:12px;padding:12px;border:1.5px solid var(--line);border-radius:14px;background:#fff}
+.member-info{flex:1 1 180px;min-width:0}.member-info strong{display:block;overflow:hidden;text-overflow:ellipsis}.member-info span{font-size:13px;color:var(--muted);word-break:break-word}
+.role-pill{font-style:normal;font-weight:800;font-size:11px;padding:3px 8px;border-radius:999px;background:var(--leaf-soft);color:var(--leaf-dark)}
+.role-pill.owner{background:var(--tang);color:#fff}.role-pill.admin{background:var(--leaf-dark);color:#fff}
+.app-admin form{display:grid;gap:8px;margin:12px 0;padding:14px;border:1.5px dashed var(--leaf);border-radius:16px;background:var(--leaf-soft)}
+.app-admin label,.group-admin label{display:grid;gap:4px;font-weight:700;color:var(--leaf-dark)}
+.app-admin input,.app-admin select,.group-admin input:not([type=checkbox]),.group-admin textarea{padding:12px;border:1.5px solid var(--line);border-radius:12px;background:#fff;font-size:16px;color:var(--ink)}
+.group-admin .ghost.danger{margin-top:8px}
+.group-admin .checkbox-row,.app-admin .checkbox-row{display:flex;flex-direction:row;align-items:center;gap:8px}
